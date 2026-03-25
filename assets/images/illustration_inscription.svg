@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" width="480" height="320">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0D1B3E"/>
+      <stop offset="100%" style="stop-color:#0A2448"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6BB3F0"/>
+      <stop offset="100%" style="stop-color:#4A90D9"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#D4A843"/>
+      <stop offset="100%" style="stop-color:#F0C866"/>
+    </linearGradient>
+    <linearGradient id="gown" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A3A8F"/>
+      <stop offset="100%" style="stop-color:#0D1B3E"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="12" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="blur1"><feGaussianBlur stdDeviation="30"/></filter>
+    <filter id="softshadow"><feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/></filter>
+  </defs>
+
+  <rect width="480" height="320" fill="url(#bg)" rx="20"/>
+
+  <!-- Atmosphere -->
+  <circle cx="240" cy="340" r="200" fill="#4A90D9" opacity="0.08" filter="url(#blur1)"/>
+  <circle cx="80"  cy="80"  r="100" fill="#4A90D9" opacity="0.08" filter="url(#blur1)"/>
+  <circle cx="400" cy="50"  r="90"  fill="#D4A843" opacity="0.07" filter="url(#blur1)"/>
+
+  <!-- Stars / sparkles -->
+  <circle cx="44"  cy="56"  r="2.5" fill="#D4A843" opacity="0.6" filter="url(#glow)"/>
+  <circle cx="436" cy="68"  r="2"   fill="#6BB3F0" opacity="0.5" filter="url(#glow)"/>
+  <circle cx="90"  cy="260" r="2"   fill="#D4A843" opacity="0.4"/>
+  <circle cx="390" cy="250" r="2"   fill="#6BB3F0" opacity="0.35"/>
+  <circle cx="460" cy="170" r="1.5" fill="#D4A843" opacity="0.35"/>
+  <!-- Floating sparkles around figure -->
+  <text x="118" y="80"  font-size="14" fill="#D4A843" opacity="0.55" filter="url(#glow)">✦</text>
+  <text x="340" y="95"  font-size="11" fill="#6BB3F0" opacity="0.45" filter="url(#glow)">✦</text>
+  <text x="310" y="60"  font-size="8"  fill="#D4A843" opacity="0.40">✦</text>
+  <text x="155" y="115" font-size="8"  fill="#6BB3F0" opacity="0.35">✦</text>
+
+  <!-- FIGURE centred -->
+  <g transform="translate(240, 52)" filter="url(#softshadow)">
+
+    <!-- Graduation cap -->
+    <rect x="-34" y="0"   width="68" height="12" rx="3"  fill="#0D1B3E" opacity="0.95"/>
+    <polygon points="-50,6 0,-18 50,6 0,14" fill="#0D1B3E" opacity="0.95"/>
+    <!-- Cap top shine -->
+    <polygon points="-20,2 0,-12 20,2 0,6" fill="white" opacity="0.07"/>
+    <!-- Tassel -->
+    <line x1="44" y1="8"  x2="58" y2="34" stroke="url(#gold)" stroke-width="2.5"/>
+    <circle cx="58" cy="36" r="5" fill="url(#gold)" opacity="0.9"/>
+    <line x1="53" y1="36" x2="50" y2="50" stroke="#D4A843" stroke-width="1.2" opacity="0.7"/>
+    <line x1="58" y1="38" x2="58" y2="54" stroke="#D4A843" stroke-width="1.2" opacity="0.7"/>
+    <line x1="63" y1="36" x2="66" y2="50" stroke="#D4A843" stroke-width="1.2" opacity="0.7"/>
+
+    <!-- Head -->
+    <circle cx="0" cy="38" r="28" fill="#4A90D9" opacity="0.85"/>
+    <!-- Face shine -->
+    <circle cx="-9" cy="30" r="10" fill="white" opacity="0.10"/>
+    <!-- Eyes -->
+    <circle cx="-9" cy="36" r="3.5" fill="#0D1B3E" opacity="0.6"/>
+    <circle cx="9"  cy="36" r="3.5" fill="#0D1B3E" opacity="0.6"/>
+    <!-- Smile -->
+    <path d="M-8,46 Q0,54 8,46" stroke="#0D1B3E" stroke-width="2" fill="none" opacity="0.45" stroke-linecap="round"/>
+
+    <!-- Neck -->
+    <rect x="-8" y="64" width="16" height="14" rx="4" fill="#4A90D9" opacity="0.6"/>
+
+    <!-- Gown body -->
+    <path d="M-48,78 Q-52,180 -40,230 L40,230 Q52,180 48,78 Q32,68 0,68 Q-32,68 -48,78Z" fill="url(#gown)" opacity="0.92"/>
+    <!-- Gown highlight -->
+    <path d="M-12,78 Q-8,160 -4,230 L4,230 Q8,160 12,78 Q6,70 0,70 Q-6,70 -12,78Z" fill="white" opacity="0.05"/>
+    <!-- Academic collar / stole -->
+    <polygon points="-14,72 0,96 14,72" fill="white" opacity="0.18"/>
+    <!-- Gold stole stripe -->
+    <polygon points="-6,74 0,90 6,74" fill="url(#gold)" opacity="0.55"/>
+
+    <!-- Left arm -->
+    <path d="M-48,90 Q-86,110 -90,148 Q-90,162 -76,162" stroke="#1A3A8F" stroke-width="18" fill="none" stroke-linecap="round" opacity="0.85"/>
+    <!-- Right arm + diploma -->
+    <path d="M48,90 Q86,110 92,144" stroke="#1A3A8F" stroke-width="18" fill="none" stroke-linecap="round" opacity="0.85"/>
+
+    <!-- Books in left hand -->
+    <rect x="-106" y="148" width="40" height="56" rx="4" fill="#D4A843" opacity="0.80"/>
+    <rect x="-98"  y="144" width="40" height="56" rx="4" fill="#4A90D9" opacity="0.75"/>
+    <rect x="-90"  y="140" width="40" height="56" rx="4" fill="#6BB3F0" opacity="0.65"/>
+    <!-- Book spines -->
+    <line x1="-104" y1="152" x2="-68" y2="152" stroke="white" stroke-width="1" opacity="0.2"/>
+    <line x1="-104" y1="160" x2="-68" y2="160" stroke="white" stroke-width="1" opacity="0.15"/>
+    <line x1="-96"  y1="148" x2="-56" y2="148" stroke="white" stroke-width="1" opacity="0.18"/>
+
+    <!-- Diploma / scroll in right hand -->
+    <rect x="76" y="130" width="46" height="34" rx="7" fill="#F0C866" opacity="0.85"/>
+    <!-- Scroll lines -->
+    <line x1="84" y1="140" x2="114" y2="140" stroke="#0D1B3E" stroke-width="1.5" opacity="0.35"/>
+    <line x1="84" y1="148" x2="110" y2="148" stroke="#0D1B3E" stroke-width="1.5" opacity="0.35"/>
+    <line x1="84" y1="156" x2="108" y2="156" stroke="#0D1B3E" stroke-width="1" opacity="0.25"/>
+    <!-- Ribbon seal -->
+    <circle cx="99" cy="162" r="7" fill="#D4A843" opacity="0.9"/>
+    <circle cx="99" cy="162" r="4" fill="url(#gold)"/>
+    <!-- Scroll curl ends -->
+    <rect x="76"  y="130" width="8" height="34" rx="4" fill="#E8B840" opacity="0.5"/>
+    <rect x="114" y="130" width="8" height="34" rx="4" fill="#E8B840" opacity="0.5"/>
+
+    <!-- Feet/base -->
+    <ellipse cx="0"   cy="232" rx="36" ry="8" fill="white" opacity="0.07"/>
+    <rect    x="-24"  y="228" width="18" height="16" rx="5" fill="#0D1B3E" opacity="0.5"/>
+    <rect    x="6"    y="228" width="18" height="16" rx="5" fill="#0D1B3E" opacity="0.5"/>
+  </g>
+
+  <!-- Ground shadow -->
+  <ellipse cx="240" cy="296" rx="96" ry="12" fill="#4A90D9" opacity="0.12"/>
+  <!-- Ground line -->
+  <line x1="60" y1="298" x2="420" y2="298" stroke="white" stroke-width="1" opacity="0.06"/>
+</svg>

@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /utilisateur/{userId} {
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null && isAdmin();
+    }
+
+    function isAdmin() {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/utilisateur/$(request.auth.uid))
+          && get(/databases/$(database)/documents/utilisateur/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}
