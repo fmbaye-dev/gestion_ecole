@@ -434,48 +434,6 @@ class PageElevesClasse extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PageDetailEleve(eleve: e),
-                          ),
-                        ),
-                        leading: CircleAvatar(
-                          radius: 20,
-                          backgroundColor: scheme.primary.withOpacity(0.1),
-                          child: Text(
-                            e.initiales,
-                            style: TextStyle(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          e.nomComplet,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Text(
-                          e.email,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.onSurface.withOpacity(0.55),
-                          ),
-                        ),
-                        trailing: Icon(
-                          Icons.chevron_right_rounded,
-                          color: scheme.onSurface.withOpacity(0.3),
-                        ),
-                      ),
                     );
                   },
                 ),

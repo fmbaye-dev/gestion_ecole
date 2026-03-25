@@ -11,6 +11,7 @@ class EleveModel {
   final String adresse;
   final String idClasse;
   final String nomClasse;
+  final String anneeScolaire; // ex: "2024-2025"
 
   EleveModel({
     this.id,
@@ -21,6 +22,7 @@ class EleveModel {
     required this.adresse,
     required this.idClasse,
     this.nomClasse = '',
+    this.anneeScolaire = '',
   });
 
   factory EleveModel.fromFirestore(DocumentSnapshot doc) {
@@ -33,6 +35,7 @@ class EleveModel {
       adresse: d['adresse'] ?? '',
       idClasse: d['idClasse'] ?? '',
       nomClasse: d['nomClasse'] ?? '',
+      anneeScolaire: d['anneeScolaire'] ?? '',
     );
   }
 
@@ -43,6 +46,7 @@ class EleveModel {
     'adresse': adresse,
     'idClasse': idClasse,
     'nomClasse': nomClasse,
+    'anneeScolaire': anneeScolaire,
     'role': 'eleve',
   };
 
@@ -52,5 +56,13 @@ class EleveModel {
       return '${p[0][0]}${p[1][0]}'.toUpperCase();
     }
     return nomComplet.isNotEmpty ? nomComplet[0].toUpperCase() : 'E';
+  }
+
+  // Calcule l'année scolaire courante automatiquement
+  static String anneeCourante() {
+    final now = DateTime.now();
+    // L'année scolaire commence en septembre
+    final debut = now.month >= 9 ? now.year : now.year - 1;
+    return '$debut-${debut + 1}';
   }
 }

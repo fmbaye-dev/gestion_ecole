@@ -36,10 +36,8 @@ class _PageEnseignantsState extends State<PageEnseignants> {
         foregroundColor: scheme.onSurface,
       ),
       drawer: const _DrawerAdmin(),
-
       body: Column(
         children: [
-          // ── Barre de recherche ─────────────────────────────────────────────
           Container(
             color: scheme.surface,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -64,30 +62,21 @@ class _PageEnseignantsState extends State<PageEnseignants> {
               ),
             ),
           ),
-
-          // ── Liste ──────────────────────────────────────────────────────────
           Expanded(
             child: StreamBuilder<List<EnseignantModel>>(
               stream: vm.streamEnseignants,
               builder: (_, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return Center(
-                    child: CircularProgressIndicator(color: scheme.primary),
-                  );
+                      child: CircularProgressIndicator(color: scheme.primary));
                 }
                 if (snap.hasError) {
-                  return _vide(
-                    context,
-                    Icons.error_outline_rounded,
-                    'Erreur de chargement',
-                    scheme.error,
-                  );
+                  return _vide(context, Icons.error_outline_rounded,
+                      'Erreur de chargement', scheme.error);
                 }
                 final list = (snap.data ?? [])
-                    .where(
-                      (e) =>
-                          _q.isEmpty || e.nomComplet.toLowerCase().contains(_q),
-                    )
+                    .where((e) =>
+                        _q.isEmpty || e.nomComplet.toLowerCase().contains(_q))
                     .toList();
 
                 if (list.isEmpty) {
@@ -100,7 +89,6 @@ class _PageEnseignantsState extends State<PageEnseignants> {
                     scheme.onSurface.withOpacity(0.35),
                   );
                 }
-
                 return ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                   itemCount: list.length,
@@ -111,12 +99,9 @@ class _PageEnseignantsState extends State<PageEnseignants> {
           ),
         ],
       ),
-
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const FormulaireEnseignant()),
-        ),
+        onPressed: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const FormulaireEnseignant())),
         icon: const Icon(Icons.person_add_rounded),
         label: const Text('Ajouter'),
       ),
@@ -127,24 +112,19 @@ class _PageEnseignantsState extends State<PageEnseignants> {
       Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 56, color: color),
-              const SizedBox(height: 14),
-              Text(
-                msg,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, size: 56, color: color),
+            const SizedBox(height: 14),
+            Text(msg,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: color, fontSize: 14),
-              ),
-            ],
-          ),
+                style: TextStyle(color: color, fontSize: 14)),
+          ]),
         ),
       );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CARD ENSEIGNANT
+// CARD ENSEIGNANT — tap → page détail
 // ════════════════════════════════════════════════════════════════════════════
 class _EnseignantCard extends StatelessWidget {
   final EnseignantModel enseignant;
@@ -165,39 +145,34 @@ class _EnseignantCard extends StatelessWidget {
         border: Border.all(color: scheme.outlineVariant.withOpacity(0.4)),
         boxShadow: [
           BoxShadow(
-            color: scheme.shadow.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
+              color: scheme.shadow.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 3))
         ],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        // Tap sur la card → page détail
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => PageDetailEnseignant(enseignant: enseignant)),
+        ),
         leading: CircleAvatar(
           radius: 22,
           backgroundColor: kColor.withOpacity(0.12),
-          child: Text(
-            enseignant.initiales,
-            style: const TextStyle(
-              color: kColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-            ),
-          ),
+          child: Text(enseignant.initiales,
+              style: const TextStyle(
+                  color: kColor, fontWeight: FontWeight.bold, fontSize: 15)),
         ),
-        title: Text(
-          enseignant.nomComplet,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
+        title: Text(enseignant.nomComplet,
+            style:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            enseignant.email,
-            style: TextStyle(
-              fontSize: 12,
-              color: scheme.onSurface.withOpacity(0.55),
-            ),
-          ),
+          child: Text(enseignant.email,
+              style: TextStyle(
+                  fontSize: 12, color: scheme.onSurface.withOpacity(0.55))),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -206,11 +181,10 @@ class _EnseignantCard extends StatelessWidget {
               tooltip: 'Modifier',
               icon: Icon(Icons.edit_rounded, size: 20, color: scheme.primary),
               onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FormulaireEnseignant(enseignant: enseignant),
-                ),
-              ),
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          FormulaireEnseignant(enseignant: enseignant))),
             ),
             IconButton(
               tooltip: 'Supprimer',
@@ -228,33 +202,30 @@ class _EnseignantCard extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Supprimer l\'enseignant ?'),
         content: Text('${enseignant.nomComplet} sera supprimé définitivement.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler')),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: scheme.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
+                backgroundColor: scheme.error,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10))),
             onPressed: () async {
               Navigator.pop(ctx);
               final ok = await vm.supprimer(enseignant.id!);
-              if (context.mounted) {
+              if (context.mounted)
                 _snack(
-                  context,
-                  ok ? 'Enseignant supprimé' : vm.erreur ?? 'Erreur',
-                  ok ? scheme.error : Colors.orange,
-                );
-              }
+                    context,
+                    ok ? 'Enseignant supprimé' : vm.erreur ?? 'Erreur',
+                    ok ? scheme.error : Colors.orange);
             },
-            child: Text('Supprimer', style: TextStyle(color: scheme.onError)),
+            child:
+                Text('Supprimer', style: TextStyle(color: scheme.onError)),
           ),
         ],
       ),
@@ -263,9 +234,392 @@ class _EnseignantCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FORMULAIRE AJOUT / MODIFICATION
-// Selon diagramme : nomComplet, email, telephone, adresse
-// La matière et la classe sont gérées dans Enseignement (table d'association)
+// PAGE DÉTAIL ENSEIGNANT (accessible admin + élève)
+// ════════════════════════════════════════════════════════════════════════════
+class PageDetailEnseignant extends StatelessWidget {
+  final EnseignantModel enseignant;
+  /// Si true → pas de bouton modifier/supprimer (vue élève)
+  final bool lectureSeule;
+
+  const PageDetailEnseignant({
+    super.key,
+    required this.enseignant,
+    this.lectureSeule = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        title: const Text('Fiche enseignant'),
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+        actions: lectureSeule
+            ? null
+            : [
+                IconButton(
+                  tooltip: 'Modifier',
+                  icon: Icon(Icons.edit_rounded, color: scheme.primary),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            FormulaireEnseignant(enseignant: enseignant)),
+                  ),
+                ),
+              ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // ── Header ─────────────────────────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 36, 24, 36),
+              color: scheme.primary,
+              child: Column(
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: scheme.onPrimary.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: scheme.onPrimary.withOpacity(0.5), width: 2.5),
+                    ),
+                    child: Center(
+                      child: Text(enseignant.initiales,
+                          style: TextStyle(
+                              color: scheme.onPrimary,
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(enseignant.nomComplet,
+                      style: TextStyle(
+                          color: scheme.onPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 4),
+                  Text(enseignant.email,
+                      style: TextStyle(
+                          color: scheme.onPrimary.withOpacity(0.8),
+                          fontSize: 13)),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: scheme.onPrimary.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: scheme.onPrimary.withOpacity(0.35)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified_rounded,
+                            color: scheme.onPrimary, size: 14),
+                        const SizedBox(width: 6),
+                        Text('ENSEIGNANT',
+                            style: TextStyle(
+                                color: scheme.onPrimary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.2)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // ── Coordonnées ──────────────────────────────────────────
+                  _SectionCard(
+                    titre: 'Coordonnées',
+                    icone: Icons.contact_phone_rounded,
+                    items: [
+                      _InfoItem(Icons.phone_rounded, 'Téléphone',
+                          enseignant.telephone),
+                      _InfoItem(Icons.location_on_rounded, 'Adresse',
+                          enseignant.adresse),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ── Enseignements ─────────────────────────────────────────
+                  _EnseignementsCard(idEnseignant: enseignant.id!),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Carte section générique ───────────────────────────────────────────────
+class _SectionCard extends StatelessWidget {
+  final String titre;
+  final IconData icone;
+  final List<_InfoItem> items;
+  const _SectionCard(
+      {required this.titre, required this.icone, required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+              color: scheme.shadow.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                    color: scheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Icon(icone, size: 15, color: scheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Text(titre,
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: scheme.primary)),
+            ]),
+          ),
+          Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
+          ...items.asMap().entries.map((entry) {
+            final i = entry.key;
+            final item = entry.value;
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 13),
+                  child: Row(children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                          color: scheme.primary.withOpacity(0.07),
+                          borderRadius: BorderRadius.circular(10)),
+                      child: Icon(item.icon, size: 18, color: scheme.primary),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.label,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurface.withOpacity(0.5))),
+                          const SizedBox(height: 2),
+                          Text(item.value.isEmpty ? '—' : item.value,
+                              style: const TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+                if (i < items.length - 1)
+                  Divider(
+                      height: 1,
+                      indent: 68,
+                      endIndent: 16,
+                      color: scheme.outlineVariant.withOpacity(0.3)),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoItem {
+  final IconData icon;
+  final String label, value;
+  const _InfoItem(this.icon, this.label, this.value);
+}
+
+// ── Carte enseignements de l'enseignant ───────────────────────────────────
+class _EnseignementsCard extends StatelessWidget {
+  final String idEnseignant;
+  const _EnseignementsCard({required this.idEnseignant});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+              color: scheme.shadow.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                    color: scheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child:
+                    Icon(Icons.school_rounded, size: 15, color: scheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Text('Enseignements',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: scheme.primary)),
+            ]),
+          ),
+          Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('enseignement')
+                .where('idEnseignant', isEqualTo: idEnseignant)
+                .snapshots(),
+            builder: (_, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                      child: CircularProgressIndicator(
+                          color: scheme.primary, strokeWidth: 2)),
+                );
+              }
+              final docs = snap.data?.docs ?? [];
+              if (docs.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 18,
+                        color: scheme.onSurface.withOpacity(0.4)),
+                    const SizedBox(width: 10),
+                    Text('Aucun enseignement assigné',
+                        style: TextStyle(
+                            color: scheme.onSurface.withOpacity(0.5),
+                            fontSize: 13)),
+                  ]),
+                );
+              }
+
+              // Grouper par année scolaire
+              final Map<String, List<Map<String, dynamic>>> parAnnee = {};
+              for (final doc in docs) {
+                final d = doc.data() as Map<String, dynamic>;
+                final annee = d['anneeScolaire'] as String? ?? '—';
+                parAnnee.putIfAbsent(annee, () => []).add(d);
+              }
+              final annees = parAnnee.keys.toList()..sort((a, b) => b.compareTo(a));
+
+              return Column(
+                children: [
+                  for (final annee in annees) ...[
+                    // Sous-titre année
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      color: scheme.primary.withOpacity(0.05),
+                      child: Text(annee,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.primary)),
+                    ),
+                    ...parAnnee[annee]!.asMap().entries.map((entry) {
+                      final d = entry.value;
+                      final matiere = d['matiere'] as String? ?? '';
+                      final nomClasse = d['nomClasse'] as String? ?? '';
+                      return Column(
+                        children: [
+                          ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            leading: Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                  color: const Color(0xFF7B3FA0).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10)),
+                              child: const Icon(Icons.book_rounded,
+                                  size: 18, color: Color(0xFF7B3FA0)),
+                            ),
+                            title: Text(matiere,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(nomClasse,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurface.withOpacity(0.55))),
+                          ),
+                          if (entry.key < parAnnee[annee]!.length - 1)
+                            Divider(
+                                height: 1,
+                                indent: 68,
+                                endIndent: 16,
+                                color: scheme.outlineVariant.withOpacity(0.3)),
+                        ],
+                      );
+                    }),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FORMULAIRE AJOUT / MODIFICATION — avec gestion email existant
 // ════════════════════════════════════════════════════════════════════════════
 class FormulaireEnseignant extends StatefulWidget {
   final EnseignantModel? enseignant;
@@ -288,7 +642,6 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
   bool _motPasseVisible = false;
   bool get _estModif => widget.enseignant != null;
 
-  // Liste des enseignements à créer : [{matiere, idClasse, nomClasse}]
   final List<Map<String, String>> _enseignements = [];
   List<Map<String, dynamic>> _classes = [];
 
@@ -308,14 +661,7 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
 
   @override
   void dispose() {
-    for (final c in [
-      _nom,
-      _email,
-      _motPasse,
-      _telephone,
-      _adresse,
-      _anneeScolaire,
-    ])
+    for (final c in [_nom, _email, _motPasse, _telephone, _adresse, _anneeScolaire])
       c.dispose();
     super.dispose();
   }
@@ -325,10 +671,8 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
     if (mounted)
       setState(() {
         _classes = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList()
-          ..sort(
-            (a, b) =>
-                (a['nomClasse'] as String).compareTo(b['nomClasse'] as String),
-          );
+          ..sort((a, b) =>
+              (a['nomClasse'] as String).compareTo(b['nomClasse'] as String));
       });
   }
 
@@ -350,7 +694,8 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
           });
         }
         if (snap.docs.isNotEmpty) {
-          _anneeScolaire.text = snap.docs.first.data()['anneeScolaire'] ?? '';
+          _anneeScolaire.text =
+              snap.docs.first.data()['anneeScolaire'] ?? '';
         }
       });
     }
@@ -365,13 +710,11 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
         return StatefulBuilder(
           builder: (ctx, setDlg) => AlertDialog(
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+                borderRadius: BorderRadius.circular(16)),
             title: const Text('Ajouter un enseignement'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ── Dropdown Matière depuis Firestore ────────────────────
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('matiere')
@@ -380,76 +723,65 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
                   builder: (_, snap) {
                     final matieres = snap.hasData
                         ? snap.data!.docs
-                              .map(
-                                (d) =>
-                                    (d.data() as Map<String, dynamic>)['nom']
-                                        as String,
-                              )
-                              .toList()
+                            .map((d) =>
+                                (d.data() as Map<String, dynamic>)['nom']
+                                    as String)
+                            .toList()
                         : <String>[];
                     return DropdownButtonFormField<String>(
                       value: matieres.contains(nomMat) ? nomMat : null,
                       decoration: InputDecoration(
                         labelText: 'Matière',
-                        prefixIcon: const Icon(Icons.book_rounded, size: 20),
+                        prefixIcon:
+                            const Icon(Icons.book_rounded, size: 20),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       items: matieres
-                          .map(
-                            (m) => DropdownMenuItem(value: m, child: Text(m)),
-                          )
+                          .map((m) =>
+                              DropdownMenuItem(value: m, child: Text(m)))
                           .toList(),
                       onChanged: (val) => setDlg(() => nomMat = val),
                     );
                   },
                 ),
                 const SizedBox(height: 12),
-
-                // ── Dropdown Classe ──────────────────────────────────────
                 DropdownButtonFormField<String>(
                   value: idCls,
                   decoration: InputDecoration(
                     labelText: 'Classe',
                     prefixIcon: const Icon(Icons.class_rounded, size: 20),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   items: _classes
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c['id'] as String,
-                          child: Text(c['nomClasse'] as String),
-                        ),
-                      )
+                      .map((c) => DropdownMenuItem(
+                            value: c['id'] as String,
+                            child: Text(c['nomClasse'] as String),
+                          ))
                       .toList(),
                   onChanged: (val) => setDlg(() {
                     idCls = val;
-                    nomCls =
-                        _classes.firstWhere((c) => c['id'] == val)['nomClasse']
-                            as String;
+                    nomCls = _classes
+                        .firstWhere((c) => c['id'] == val)['nomClasse']
+                        as String;
                   }),
                 ),
               ],
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annuler'),
-              ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Annuler')),
               FilledButton(
                 onPressed: () {
                   if (nomMat == null || idCls == null) return;
-                  setState(
-                    () => _enseignements.add({
-                      'matiere': nomMat!,
-                      'idClasse': idCls!,
-                      'nomClasse': nomCls!,
-                      'annee': _anneeScolaire.text.trim(),
-                    }),
-                  );
+                  setState(() => _enseignements.add({
+                        'matiere': nomMat!,
+                        'idClasse': idCls!,
+                        'nomClasse': nomCls!,
+                        'annee': _anneeScolaire.text.trim(),
+                      }));
                   Navigator.pop(ctx);
                 },
                 child: const Text('Ajouter'),
@@ -483,14 +815,11 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
       ok = await vm.modifier(widget.enseignant!.id!, model);
       idEnseignant = widget.enseignant!.id!;
       if (ok) {
-        // Supprimer les anciens enseignements et recréer
         final oldSnap = await FirebaseFirestore.instance
             .collection('enseignement')
             .where('idEnseignant', isEqualTo: idEnseignant)
             .get();
-        for (final doc in oldSnap.docs) {
-          await doc.reference.delete();
-        }
+        for (final doc in oldSnap.docs) await doc.reference.delete();
         for (final e in _enseignements) {
           await FirebaseFirestore.instance.collection('enseignement').add({
             'idEnseignant': idEnseignant,
@@ -529,15 +858,28 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
     }
 
     if (mounted) {
+      // Afficher l'erreur spécifique email existant
+      final errMsg = ok
+          ? null
+          : _emailExistantMessage(vm.erreur ?? '');
       _snack(
-        context,
-        ok
-            ? (_estModif ? 'Enseignant modifié ✓' : 'Enseignant ajouté ✓')
-            : vm.erreur ?? 'Erreur',
-        ok ? Colors.green : Colors.red,
-      );
+          context,
+          ok
+              ? (_estModif ? 'Enseignant modifié ✓' : 'Enseignant ajouté ✓')
+              : errMsg ?? vm.erreur ?? 'Erreur',
+          ok ? Colors.green : Colors.red);
       if (ok) Navigator.pop(context);
     }
+  }
+
+  /// Traduit les codes Firebase Auth en messages lisibles
+  String _emailExistantMessage(String raw) {
+    if (raw.contains('email-already-in-use') ||
+        raw.contains('email-already-exists') ||
+        raw.contains('Email déjà utilisé')) {
+      return 'Cet email est déjà utilisé par un autre compte.';
+    }
+    return raw;
   }
 
   @override
@@ -548,9 +890,9 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
-        title: Text(
-          _estModif ? 'Modifier l\'enseignant' : 'Ajouter un enseignant',
-        ),
+        title: Text(_estModif
+            ? 'Modifier l\'enseignant'
+            : 'Ajouter un enseignant'),
         centerTitle: false,
         elevation: 0,
         backgroundColor: scheme.surface,
@@ -563,15 +905,10 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Informations personnelles ──────────────────────────────
               _SectionTitre('Informations personnelles', Icons.person_rounded),
               const SizedBox(height: 14),
 
-              _Champ(
-                ctrl: _nom,
-                label: 'Nom complet',
-                icon: Icons.badge_rounded,
-              ),
+              _Champ(ctrl: _nom, label: 'Nom complet', icon: Icons.badge_rounded),
               const SizedBox(height: 12),
               _Champ(
                 ctrl: _email,
@@ -583,7 +920,6 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
               ),
               const SizedBox(height: 12),
 
-              // Mot de passe (création uniquement)
               if (!_estModif) ...[
                 TextFormField(
                   controller: _motPasse,
@@ -592,22 +928,16 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
                     labelText: 'Mot de passe',
                     prefixIcon: const Icon(Icons.lock_rounded, size: 20),
                     suffixIcon: IconButton(
-                      icon: Icon(
-                        _motPasseVisible
-                            ? Icons.visibility_off_rounded
-                            : Icons.visibility_rounded,
-                        size: 20,
-                      ),
+                      icon: Icon(_motPasseVisible
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded, size: 20),
                       onPressed: () =>
                           setState(() => _motPasseVisible = !_motPasseVisible),
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                     contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
+                        horizontal: 16, vertical: 14),
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Mot de passe requis';
@@ -619,25 +949,21 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
               ],
 
               _Champ(
-                ctrl: _telephone,
-                label: 'Téléphone',
-                icon: Icons.phone_rounded,
-                type: TextInputType.phone,
-              ),
+                  ctrl: _telephone,
+                  label: 'Téléphone',
+                  icon: Icons.phone_rounded,
+                  type: TextInputType.phone),
               const SizedBox(height: 12),
               _Champ(
-                ctrl: _adresse,
-                label: 'Adresse',
-                icon: Icons.location_on_rounded,
-                lines: 2,
-              ),
+                  ctrl: _adresse,
+                  label: 'Adresse',
+                  icon: Icons.location_on_rounded,
+                  lines: 2),
               const SizedBox(height: 24),
 
-              // ── Enseignements ──────────────────────────────────────────
               _SectionTitre('Enseignements', Icons.school_rounded),
               const SizedBox(height: 8),
 
-              // Année scolaire commune
               _Champ(
                 ctrl: _anneeScolaire,
                 label: 'Année scolaire',
@@ -647,68 +973,52 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
               ),
               const SizedBox(height: 12),
 
-              // Liste des enseignements ajoutés
               ..._enseignements.asMap().entries.map((entry) {
                 final i = entry.key;
                 final e = entry.value;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
+                      horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: scheme.primary.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: scheme.primary.withOpacity(0.2)),
+                    border:
+                        Border.all(color: scheme.primary.withOpacity(0.2)),
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              e['matiere'] ?? '',
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(e['matiere'] ?? '',
                               style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              e['nomClasse'] ?? '',
+                                  fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 2),
+                          Text(e['nomClasse'] ?? '',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: scheme.onSurface.withOpacity(0.6),
-                              ),
-                            ),
-                          ],
-                        ),
+                                  fontSize: 12,
+                                  color: scheme.onSurface.withOpacity(0.6))),
+                        ],
                       ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.delete_rounded,
-                          color: scheme.error,
-                          size: 20,
-                        ),
-                        onPressed: () =>
-                            setState(() => _enseignements.removeAt(i)),
-                      ),
-                    ],
-                  ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete_rounded,
+                          color: scheme.error, size: 20),
+                      onPressed: () =>
+                          setState(() => _enseignements.removeAt(i)),
+                    ),
+                  ]),
                 );
               }),
 
-              // Bouton ajouter un enseignement
               OutlinedButton.icon(
                 onPressed: _classes.isEmpty ? null : _ajouterEnseignement,
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Ajouter un enseignement'),
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
@@ -724,34 +1034,24 @@ class _FormulaireEnseignantState extends State<FormulaireEnseignant> {
                 ),
               const SizedBox(height: 32),
 
-              // ── Bouton enregistrer ─────────────────────────────────────
               SizedBox(
                 height: 52,
                 child: FilledButton(
                   onPressed: vm.isLoading ? null : _enregistrer,
                   style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14))),
                   child: vm.isLoading
                       ? const SizedBox(
-                          width: 22,
-                          height: 22,
+                          width: 22, height: 22,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                              strokeWidth: 2, color: Colors.white))
                       : Text(
                           _estModif
                               ? 'Enregistrer les modifications'
                               : 'Ajouter l\'enseignant',
                           style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                              fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -775,174 +1075,109 @@ class _DrawerAdmin extends StatelessWidget {
 
     return Drawer(
       backgroundColor: scheme.surface,
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
-            color: scheme.primary,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: scheme.onPrimary.withOpacity(0.2),
-                  child: Icon(
-                    Icons.admin_panel_settings_rounded,
-                    color: scheme.onPrimary,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Administrateur',
-                  style: TextStyle(
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
+          color: scheme.primary,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: scheme.onPrimary.withOpacity(0.2),
+              child: Icon(Icons.admin_panel_settings_rounded,
+                  color: scheme.onPrimary, size: 28),
+            ),
+            const SizedBox(height: 12),
+            Text('Administrateur',
+                style: TextStyle(
                     color: scheme.onPrimary,
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  user?.email ?? '',
-                  style: TextStyle(
-                    color: scheme.onPrimary.withOpacity(0.8),
-                    fontSize: 12,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 3),
+            Text(user?.email ?? '',
+                style: TextStyle(
+                    color: scheme.onPrimary.withOpacity(0.8), fontSize: 12),
+                overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            children: [
+              _DItem(Icons.dashboard_rounded, 'Tableau de bord',
+                  Routeur.routeAccueil, false),
+              const _DLabel('GESTION'),
+              _DItem(Icons.school_rounded, 'Élèves', Routeur.routeEleves, false),
+              _DItem(Icons.person_rounded, 'Enseignants',
+                  Routeur.routeEnseignants, true),
+              _DItem(Icons.class_rounded, 'Classes', Routeur.routeClasses, false),
+              _DItem(Icons.book_rounded, 'Matières', Routeur.routeMatieres, false),
+              _DItem(Icons.star_rounded, 'Notes', Routeur.routeNotes, false),
+              _DItem(Icons.event_busy_rounded, 'Absences',
+                  Routeur.routeAbsences, false),
+              Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
+              _DItem(Icons.person_outline_rounded, 'Mon Profil',
+                  Routeur.routeProfil, false),
+            ],
           ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              children: [
-                _DItem(
-                  Icons.dashboard_rounded,
-                  'Tableau de bord',
-                  Routeur.routeAccueil,
-                  false,
-                ),
-                const _DLabel('GESTION'),
-                _DItem(
-                  Icons.school_rounded,
-                  'Élèves',
-                  Routeur.routeEleves,
-                  false,
-                ),
-                _DItem(
-                  Icons.person_rounded,
-                  'Enseignants',
-                  Routeur.routeEnseignants,
-                  true,
-                ),
-                _DItem(
-                  Icons.class_rounded,
-                  'Classes',
-                  Routeur.routeClasses,
-                  false,
-                ),
-                _DItem(
-                  Icons.book_rounded,
-                  'Matières',
-                  Routeur.routeMatieres,
-                  false,
-                ),
-                _DItem(Icons.star_rounded, 'Notes', Routeur.routeNotes, false),
-                _DItem(
-                  Icons.event_busy_rounded,
-                  'Absences',
-                  Routeur.routeAbsences,
-                  false,
-                ),
-                Divider(
-                  height: 20,
-                  color: scheme.outlineVariant.withOpacity(0.4),
-                ),
-                _DItem(
-                  Icons.person_outline_rounded,
-                  'Mon Profil',
-                  Routeur.routeProfil,
-                  false,
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            child: Material(
-              color: scheme.error.withOpacity(0.08),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+          child: Material(
+            color: scheme.error.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      title: const Text('Déconnexion'),
-                      content: const Text(
-                        'Voulez-vous vraiment vous déconnecter ?',
-                      ),
-                      actions: [
-                        TextButton(
+              onTap: () async {
+                Navigator.pop(context);
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    title: const Text('Déconnexion'),
+                    content:
+                        const Text('Voulez-vous vraiment vous déconnecter ?'),
+                    actions: [
+                      TextButton(
                           onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Annuler'),
-                        ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
+                          child: const Text('Annuler')),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
                             backgroundColor: scheme.error,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: Text(
-                            'Déconnecter',
-                            style: TextStyle(color: scheme.onError),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirm == true && context.mounted) {
-                    await FirebaseAuth.instance.signOut();
-                    if (context.mounted) {
-                      Navigator.pushReplacementNamed(
-                        context,
-                        Routeur.routeInitial,
-                      );
-                    }
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 13,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout_rounded, color: scheme.error, size: 20),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Déconnexion',
-                        style: TextStyle(
-                          color: scheme.error,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
+                                borderRadius: BorderRadius.circular(10))),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text('Déconnecter',
+                            style: TextStyle(color: scheme.onError)),
                       ),
                     ],
                   ),
-                ),
+                );
+                if (confirm == true && context.mounted) {
+                  await FirebaseAuth.instance.signOut();
+                  if (context.mounted)
+                    Navigator.pushReplacementNamed(
+                        context, Routeur.routeInitial);
+                }
+              },
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                child: Row(children: [
+                  Icon(Icons.logout_rounded, color: scheme.error, size: 20),
+                  const SizedBox(width: 12),
+                  Text('Déconnexion',
+                      style: TextStyle(
+                          color: scheme.error,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
+                ]),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 }
@@ -970,40 +1205,32 @@ class _DItem extends StatelessWidget {
             if (!isActive) Navigator.pushReplacementNamed(context, route);
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(children: [
+              Icon(icon,
                   size: 20,
                   color: isActive
                       ? scheme.primary
-                      : scheme.onSurface.withOpacity(0.6),
-                ),
-                const SizedBox(width: 14),
-                Text(
-                  label,
+                      : scheme.onSurface.withOpacity(0.6)),
+              const SizedBox(width: 14),
+              Text(label,
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    color: isActive
-                        ? scheme.primary
-                        : scheme.onSurface.withOpacity(0.85),
-                  ),
-                ),
-                if (isActive) ...[
-                  const Spacer(),
-                  Container(
+                      fontSize: 14,
+                      fontWeight:
+                          isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: isActive
+                          ? scheme.primary
+                          : scheme.onSurface.withOpacity(0.85))),
+              if (isActive) ...[
+                const Spacer(),
+                Container(
                     width: 5,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: scheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
+                        color: scheme.primary, shape: BoxShape.circle)),
               ],
-            ),
+            ]),
           ),
         ),
       ),
@@ -1016,17 +1243,17 @@ class _DLabel extends StatelessWidget {
   const _DLabel(this.label);
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-    child: Text(
-      label,
-      style: TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
-      ),
-    ),
-  );
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withOpacity(0.4))),
+      );
 }
 
 class _SectionTitre extends StatelessWidget {
@@ -1036,27 +1263,19 @@ class _SectionTitre extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
+    return Row(children: [
+      Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
             color: scheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 16, color: scheme.primary),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          titre,
+            borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, size: 16, color: scheme.primary),
+      ),
+      const SizedBox(width: 10),
+      Text(titre,
           style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 15,
-            color: scheme.primary,
-          ),
-        ),
-      ],
-    );
+              fontWeight: FontWeight.bold, fontSize: 15, color: scheme.primary)),
+    ]);
   }
 }
 
@@ -1079,27 +1298,28 @@ class _Champ extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TextFormField(
-    controller: ctrl,
-    keyboardType: type,
-    maxLines: lines,
-    decoration: InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, size: 20),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    ),
-    validator:
-        validator ?? (v) => (v == null || v.isEmpty) ? '$label requis' : null,
-  );
+        controller: ctrl,
+        keyboardType: type,
+        maxLines: lines,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 20),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+        validator: validator ??
+            (v) => (v == null || v.isEmpty) ? '$label requis' : null,
+      );
 }
 
 void _snack(BuildContext ctx, String msg, Color color) =>
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.w500)),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(12),
-      ),
-    );
+    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+      content: Text(msg,
+          style: const TextStyle(fontWeight: FontWeight.w500)),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.all(12),
+    ));
