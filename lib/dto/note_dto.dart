@@ -1,6 +1,4 @@
 ﻿// lib/dto/note_dto.dart
-// Selon diagramme : idEleve, nomEleve, matiere, valeur, idEnseignant
-// Pas d'idClasse ni nomClasse dans Note
 
 import 'package:gestion_ecole/models/note_model.dart';
 
@@ -8,38 +6,52 @@ class NoteDto {
   final String idEleve;
   final String nomEleve;
   final String matiere;
-  final double valeur;
   final String idEnseignant;
+  final String semestre;
+  final double? devoir1;
+  final double? devoir2;
+  final double? devoir3;
+  final double? compo1;
+  final double? compo2;
 
   NoteDto({
     required this.idEleve,
-    this.nomEleve  = '',
+    this.nomEleve = '',
     required this.matiere,
-    required this.valeur,
     this.idEnseignant = '',
+    this.semestre = 'S1',
+    this.devoir1,
+    this.devoir2,
+    this.devoir3,
+    this.compo1,
+    this.compo2,
   });
 
   factory NoteDto.fromModel(NoteModel m) => NoteDto(
-    idEleve:   m.idEleve,
-    nomEleve:  m.nomEleve,
-    matiere:      m.matiere,
-    valeur:       m.valeur,
+    idEleve: m.idEleve,
+    nomEleve: m.nomEleve,
+    matiere: m.matiere,
     idEnseignant: m.idEnseignant,
+    semestre: m.semestre,
+    devoir1: m.devoir1,
+    devoir2: m.devoir2,
+    devoir3: m.devoir3,
+    compo1: m.compo1,
+    compo2: m.compo2,
   );
 
   NoteModel toModel() => NoteModel(
-    idEleve:   idEleve,
-    nomEleve:  nomEleve,
-    matiere:      matiere,
-    valeur:       valeur,
+    idEleve: idEleve,
+    nomEleve: nomEleve,
+    matiere: matiere,
     idEnseignant: idEnseignant,
+    semestre: semestre,
+    devoir1: devoir1,
+    devoir2: devoir2,
+    devoir3: devoir3,
+    compo1: compo1,
+    compo2: compo2,
   );
 
-  Map<String, dynamic> toMap() => {
-    'idEleve':   idEleve,
-    'nomEleve':  nomEleve,
-    'matiere':      matiere,
-    'valeur':       valeur,
-    'idEnseignant': idEnseignant,
-  };
+  Map<String, dynamic> toMap() => toModel().toMap();
 }

@@ -7,6 +7,7 @@ import 'package:gestion_ecole/views/page_absences.dart';
 import 'package:gestion_ecole/views/page_accueil.dart';
 import 'package:gestion_ecole/views/page_accueil_enseignant.dart';
 import 'package:gestion_ecole/views/page_accueil_eleve.dart';
+import 'package:gestion_ecole/views/page_bulletin.dart';
 import 'package:gestion_ecole/views/page_classes.dart';
 import 'package:gestion_ecole/views/page_matieres.dart';
 import 'package:gestion_ecole/views/page_enseignants.dart';
@@ -28,6 +29,7 @@ abstract class Routeur {
   static const String routeMatieres = '/matieres';
   static const String routeNotes = '/notes';
   static const String routeAbsences = '/absences';
+  static const String routeBulletin = '/bulletin';
 
   static Route<dynamic> lesRoutesGenerees(RouteSettings settings) {
     switch (settings.name) {
@@ -53,6 +55,8 @@ abstract class Routeur {
         return _page(const PageNotes());
       case routeAbsences:
         return _page(const PageAbsences());
+      case routeBulletin:
+        return _page(const PageBulletin());
       default:
         return _page(
           PageRouteInconnue(

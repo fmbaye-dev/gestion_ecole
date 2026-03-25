@@ -1,7 +1,7 @@
 ﻿// lib/views/page_notes.dart
-// Admin      → toutes les notes, filtre classe + matière (lecture seule)
-// Enseignant → ses notes, filtre classe + matière, saisir/modifier/supprimer
-// Élève   → ses notes, filtre matière (lecture seule)
+// Admin      → toutes les notes, filtre classe + matière + semestre (lecture)
+// Enseignant → ses notes, filtre classe (ses classes) + matière + semestre, saisir/modifier/supprimer
+// Élève      → ses notes, filtre matière + semestre (lecture)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,24 +12,20 @@ import 'package:gestion_ecole/models/note_model.dart';
 import 'package:gestion_ecole/view_model/note_view_model.dart';
 import 'package:gestion_ecole/view_model/classe_view_model.dart';
 
+// ════════════════════════════════════════════════════════════════════════════
+// PAGE NOTES
+// ════════════════════════════════════════════════════════════════════════════
 class PageNotes extends StatefulWidget {
   const PageNotes({super.key});
-
   @override
   State<PageNotes> createState() => _PageNotesState();
 }
 
 class _PageNotesState extends State<PageNotes> {
-  String? _role;
-  String? _uid;
+  String? _role, _uid;
   bool _roleCharge = false;
-
-  // Filtres
-  String? _filtreIdClasse;
-  String? _filtreNomClasse;
-  String? _filtreMatiere;
-
-  // Élèves de la classe sélectionnée (pour filtrage côté client)
+  String? _filtreIdClasse, _filtreNomClasse, _filtreMatiere;
+  String? _filtreSemestre; // null = tous, 'S1', 'S2'
   List<String> _idElevesClasse = [];
 
   @override
@@ -48,7 +44,7 @@ class _PageNotesState extends State<PageNotes> {
         .get();
     if (mounted)
       setState(() {
-        _role = doc.data()?['role'] as String? ?? '';
+        _role = doc.data()?['role'] ?? '';
         _roleCharge = true;
       });
   }
@@ -61,30 +57,59 @@ class _PageNotesState extends State<PageNotes> {
       _idElevesClasse = [];
     });
     if (idClasse == null) return;
-
-    // Récupérer les IDs des élèves de cette classe
     final snap = await FirebaseFirestore.instance
         .collection('utilisateur')
         .where('role', isEqualTo: 'eleve')
         .where('idClasse', isEqualTo: idClasse)
         .get();
     if (mounted)
-      setState(() {
-        _idElevesClasse = snap.docs.map((d) => d.id).toList();
-      });
+      setState(() => _idElevesClasse = snap.docs.map((d) => d.id).toList());
+  }
+
+  Future<void> _deconnexion() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Déconnexion'),
+        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Déconnecter',
+              style: TextStyle(color: Theme.of(context).colorScheme.onError),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      await FirebaseAuth.instance.signOut();
+      if (mounted)
+        Navigator.pushReplacementNamed(context, Routeur.routeInitial);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
     if (!_roleCharge) {
       return Scaffold(
         backgroundColor: scheme.surface,
         body: Center(child: CircularProgressIndicator(color: scheme.primary)),
       );
     }
-
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
@@ -94,12 +119,10 @@ class _PageNotesState extends State<PageNotes> {
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
       ),
-      drawer: _buildDrawer(),
+      drawer: _DrawerRole(role: _role ?? 'eleve', onDeconnexion: _deconnexion),
       body: Column(
         children: [
-          // ── Filtres ─────────────────────────────────────────────────────────
           _buildFiltres(),
-          // ── Liste ───────────────────────────────────────────────────────────
           Expanded(child: _buildListe()),
         ],
       ),
@@ -125,27 +148,25 @@ class _PageNotesState extends State<PageNotes> {
 
     return Container(
       color: scheme.surface,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Column(
         children: [
           Row(
             children: [
-              // Filtre Classe (pas pour l'élève)
+              // ── Filtre classe (admin / enseignant) ─────────────────────────
               if (_role != 'eleve') ...[
                 Expanded(
                   child: _role == 'enseignant'
-                      // Enseignant : seulement ses classes via enseignement
                       ? _DropdownClasseEnseignant(
                           idEnseignant: _uid!,
                           value: _filtreIdClasse,
                           onChanged: _onClasseChanged,
                         )
-                      // Admin : toutes les classes
                       : _DropdownFiltre(
                           hint: 'Toutes les classes',
                           value: _filtreIdClasse,
                           actif: _filtreIdClasse != null,
-                          extra: [
+                          items: [
                             const DropdownMenuItem<String>(
                               value: null,
                               child: Text(
@@ -153,18 +174,16 @@ class _PageNotesState extends State<PageNotes> {
                                 style: TextStyle(fontSize: 13),
                               ),
                             ),
-                          ],
-                          items: cvm.classes
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c.id,
-                                  child: Text(
-                                    c.nomClasse,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
+                            ...cvm.classes.map(
+                              (c) => DropdownMenuItem(
+                                value: c.id,
+                                child: Text(
+                                  c.nomClasse,
+                                  style: const TextStyle(fontSize: 13),
                                 ),
-                              )
-                              .toList(),
+                              ),
+                            ),
+                          ],
                           onChanged: (val) {
                             final nom = val == null
                                 ? null
@@ -178,7 +197,7 @@ class _PageNotesState extends State<PageNotes> {
                 const SizedBox(width: 8),
               ],
 
-              // Filtre Matière (élève : uniquement ses matières depuis ses notes)
+              // ── Filtre matière ──────────────────────────────────────────────
               Expanded(
                 child: _role == 'enseignant'
                     ? _DropdownMatiereEnseignant(
@@ -190,14 +209,15 @@ class _PageNotesState extends State<PageNotes> {
                     : _DropdownFiltreMatiere(
                         uid: _uid!,
                         role: _role!,
-                        idClasse: _filtreIdClasse,
                         filtreActuel: _filtreMatiere,
                         onChanged: (m) => setState(() => _filtreMatiere = m),
                       ),
               ),
 
-              // Bouton reset
-              if (_filtreIdClasse != null || _filtreMatiere != null)
+              // ── Bouton reset ──────────────────────────────────────────────
+              if (_filtreIdClasse != null ||
+                  _filtreMatiere != null ||
+                  _filtreSemestre != null)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: IconButton(
@@ -208,23 +228,52 @@ class _PageNotesState extends State<PageNotes> {
                       size: 20,
                       color: scheme.onSurface.withOpacity(0.5),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _filtreIdClasse = null;
-                        _filtreNomClasse = null;
-                        _filtreMatiere = null;
-                        _idElevesClasse = [];
-                      });
-                    },
+                    onPressed: () => setState(() {
+                      _filtreIdClasse = null;
+                      _filtreNomClasse = null;
+                      _filtreMatiere = null;
+                      _filtreSemestre = null;
+                      _idElevesClasse = [];
+                    }),
                   ),
                 ),
             ],
           ),
 
-          // Badge filtre actif
-          if (_filtreIdClasse != null || _filtreMatiere != null)
+          const SizedBox(height: 8),
+
+          // ── Filtre semestre ─────────────────────────────────────────────────
+          Row(
+            children: [
+              _ChipFiltre(
+                'Tous',
+                null,
+                _filtreSemestre == null,
+                () => setState(() => _filtreSemestre = null),
+                scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              _ChipFiltre(
+                'Semestre 1',
+                'S1',
+                _filtreSemestre == 'S1',
+                () => setState(() => _filtreSemestre = 'S1'),
+                const Color(0xFF2A8A5C),
+              ),
+              const SizedBox(width: 8),
+              _ChipFiltre(
+                'Semestre 2',
+                'S2',
+                _filtreSemestre == 'S2',
+                () => setState(() => _filtreSemestre = 'S2'),
+                const Color(0xFF7B3FA0),
+              ),
+            ],
+          ),
+
+          if (_filtreNomClasse != null || _filtreMatiere != null)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: 6),
               child: Row(
                 children: [
                   Icon(
@@ -258,50 +307,55 @@ class _PageNotesState extends State<PageNotes> {
     final scheme = Theme.of(context).colorScheme;
 
     Stream<List<NoteModel>> stream;
-
     if (_role == 'eleve') {
-      stream = vm.streamFiltrees(idEleve: _uid, matiere: _filtreMatiere);
+      stream = vm.streamFiltrees(
+        idEleve: _uid,
+        matiere: _filtreMatiere,
+        semestre: _filtreSemestre,
+      );
     } else if (_role == 'enseignant') {
-      stream = vm.streamEnseignant(_uid!).map((list) {
-        return list.where((n) {
-          if (_filtreMatiere != null && n.matiere != _filtreMatiere)
-            return false;
-          if (_filtreIdClasse != null &&
-              _idElevesClasse.isNotEmpty &&
-              !_idElevesClasse.contains(n.idEleve))
-            return false;
-          return true;
-        }).toList();
-      });
+      stream = vm
+          .streamEnseignant(_uid!)
+          .map(
+            (list) => list.where((n) {
+              if (_filtreSemestre != null && n.semestre != _filtreSemestre)
+                return false;
+              if (_filtreMatiere != null && n.matiere != _filtreMatiere)
+                return false;
+              if (_filtreIdClasse != null &&
+                  _idElevesClasse.isNotEmpty &&
+                  !_idElevesClasse.contains(n.idEleve))
+                return false;
+              return true;
+            }).toList(),
+          );
     } else {
-      // Admin
-      stream = vm.streamFiltrees(matiere: _filtreMatiere).map((list) {
-        if (_filtreIdClasse != null && _idElevesClasse.isNotEmpty) {
-          return list
-              .where((n) => _idElevesClasse.contains(n.idEleve))
-              .toList();
-        }
-        return list;
-      });
+      stream = vm
+          .streamFiltrees(matiere: _filtreMatiere, semestre: _filtreSemestre)
+          .map((list) {
+            if (_filtreIdClasse != null && _idElevesClasse.isNotEmpty)
+              return list
+                  .where((n) => _idElevesClasse.contains(n.idEleve))
+                  .toList();
+            return list;
+          });
     }
 
     return StreamBuilder<List<NoteModel>>(
       stream: stream,
       builder: (_, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+        if (snap.connectionState == ConnectionState.waiting)
           return Center(
             child: CircularProgressIndicator(color: scheme.primary),
           );
-        }
         final list = snap.data ?? [];
-        if (list.isEmpty) {
+        if (list.isEmpty)
           return _vide(
             context,
             Icons.star_border_rounded,
             'Aucune note trouvée',
             scheme.onSurface.withOpacity(0.3),
           );
-        }
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
           itemCount: list.length,
@@ -313,34 +367,717 @@ class _PageNotesState extends State<PageNotes> {
       },
     );
   }
+}
 
-  Widget _buildDrawer() {
-    if (_role == 'admin') return const _DrawerRole(role: 'admin');
-    if (_role == 'enseignant') return const _DrawerRole(role: 'enseignant');
-    return const _DrawerRole(role: 'eleve');
+// ════════════════════════════════════════════════════════════════════════════
+// CARD NOTE — affiche toutes les sous-notes
+// ════════════════════════════════════════════════════════════════════════════
+class _NoteCard extends StatelessWidget {
+  final NoteModel note;
+  final bool peutModifier;
+  const _NoteCard({required this.note, required this.peutModifier});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final vm = context.read<NoteViewModel>();
+    final moy = note.moyenneMatiere;
+    final color = note.mentionColor;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── En-tête ──────────────────────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        note.nomEleve,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          _Badge(note.matiere, const Color(0xFF7B3FA0)),
+                          const SizedBox(width: 6),
+                          _Badge(
+                            note.semestre == 'S1' ? 'Semestre 1' : 'Semestre 2',
+                            const Color(0xFF1A3A8F),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Moyenne
+                if (moy != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: color.withOpacity(0.25)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          NoteModel.fmt(moy),
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          '/20',
+                          style: TextStyle(
+                            color: color.withOpacity(0.7),
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (peutModifier) ...[
+                  IconButton(
+                    tooltip: 'Modifier',
+                    icon: Icon(
+                      Icons.edit_rounded,
+                      size: 20,
+                      color: scheme.primary,
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FormulaireNote(
+                          note: note,
+                          idEnseignant: note.idEnseignant,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Supprimer',
+                    icon: Icon(
+                      Icons.delete_rounded,
+                      size: 20,
+                      color: scheme.error,
+                    ),
+                    onPressed: () => _confirmerSuppression(context, vm),
+                  ),
+                ],
+              ],
+            ),
+
+            // ── Détail des sous-notes ─────────────────────────────────────────
+            const SizedBox(height: 10),
+            Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
+            const SizedBox(height: 10),
+
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                if (note.devoir1 != null)
+                  _SubNote('D1', note.devoir1!, const Color(0xFF1A6A9A)),
+                if (note.devoir2 != null)
+                  _SubNote('D2', note.devoir2!, const Color(0xFF1A6A9A)),
+                if (note.devoir3 != null)
+                  _SubNote('D3', note.devoir3!, const Color(0xFF1A6A9A)),
+                if (note.compo1 != null)
+                  _SubNote('C1', note.compo1!, const Color(0xFF7B3FA0)),
+                if (note.compo2 != null)
+                  _SubNote('C2', note.compo2!, const Color(0xFF7B3FA0)),
+              ],
+            ),
+
+            // Moyennes partielles
+            if (note.moyenneDevoirs != null || note.moyenneCompos != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  if (note.moyenneDevoirs != null) ...[
+                    Text(
+                      'Moy. Devoirs : ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withOpacity(0.5),
+                      ),
+                    ),
+                    Text(
+                      NoteModel.fmt(note.moyenneDevoirs),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A6A9A),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                  if (note.moyenneCompos != null) ...[
+                    Text(
+                      'Moy. Compos : ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withOpacity(0.5),
+                      ),
+                    ),
+                    Text(
+                      NoteModel.fmt(note.moyenneCompos),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF7B3FA0),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+
+            if (moy != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                note.mention,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmerSuppression(BuildContext context, NoteViewModel vm) {
+    final scheme = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Supprimer la note ?'),
+        content: Text(
+          'La note de ${note.nomEleve} en ${note.matiere} sera supprimée.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await vm.supprimer(note.id!);
+              if (context.mounted)
+                _snack(
+                  context,
+                  ok ? 'Note supprimée' : vm.erreur ?? 'Erreur',
+                  ok ? scheme.error : Colors.orange,
+                );
+            },
+            child: Text('Supprimer', style: TextStyle(color: scheme.onError)),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DROPDOWN FILTRE GÉNÉRIQUE
+// FORMULAIRE NOTE — devoir1/2/3 + compo1/2 + semestre
+// ════════════════════════════════════════════════════════════════════════════
+class FormulaireNote extends StatefulWidget {
+  final NoteModel? note;
+  final String idEnseignant;
+  const FormulaireNote({super.key, this.note, required this.idEnseignant});
+  @override
+  State<FormulaireNote> createState() => _FormulaireNoteState();
+}
+
+class _FormulaireNoteState extends State<FormulaireNote> {
+  final _fk = GlobalKey<FormState>();
+
+  final _d1 = TextEditingController();
+  final _d2 = TextEditingController();
+  final _d3 = TextEditingController();
+  final _c1 = TextEditingController();
+  final _c2 = TextEditingController();
+
+  String _semestre = 'S1';
+  String? _idClasseFiltre, _idEtu, _nomEtu, _matiere;
+  List<Map<String, dynamic>> _eleves = [];
+  List<Map<String, String>> _classesEnseignant = [];
+  List<String> _matieresEnseignant = [];
+
+  bool get _estModif => widget.note != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_estModif) {
+      final n = widget.note!;
+      _semestre = n.semestre;
+      _idEtu = n.idEleve;
+      _nomEtu = n.nomEleve;
+      _matiere = n.matiere;
+      if (n.devoir1 != null) _d1.text = NoteModel.fmt(n.devoir1);
+      if (n.devoir2 != null) _d2.text = NoteModel.fmt(n.devoir2);
+      if (n.devoir3 != null) _d3.text = NoteModel.fmt(n.devoir3);
+      if (n.compo1 != null) _c1.text = NoteModel.fmt(n.compo1);
+      if (n.compo2 != null) _c2.text = NoteModel.fmt(n.compo2);
+    }
+    _chargerDonneesEnseignant();
+  }
+
+  @override
+  void dispose() {
+    for (final c in [_d1, _d2, _d3, _c1, _c2]) c.dispose();
+    super.dispose();
+  }
+
+  double? _parse(String v) {
+    if (v.trim().isEmpty) return null;
+    final n = double.tryParse(v.trim().replaceAll(',', '.'));
+    return (n != null && n >= 0 && n <= 20) ? n : null;
+  }
+
+  String? _validateNote(String? v) {
+    if (v == null || v.trim().isEmpty) return null; // nullable
+    final n = double.tryParse(v.trim().replaceAll(',', '.'));
+    if (n == null || n < 0 || n > 20) return 'Entre 0 et 20';
+    return null;
+  }
+
+  Future<void> _chargerDonneesEnseignant() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('enseignement')
+        .where('idEnseignant', isEqualTo: widget.idEnseignant)
+        .get();
+    final Map<String, String> cls = {};
+    final Set<String> mats = {};
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final id = d['idClasse'] as String? ?? '';
+      final nm = d['nomClasse'] as String? ?? '';
+      final mt = d['matiere'] as String? ?? '';
+      if (id.isNotEmpty) cls[id] = nm;
+      if (mt.isNotEmpty) mats.add(mt);
+    }
+    if (mounted)
+      setState(() {
+        _classesEnseignant =
+            cls.entries.map((e) => {'id': e.key, 'nom': e.value}).toList()
+              ..sort((a, b) => a['nom']!.compareTo(b['nom']!));
+        _matieresEnseignant = mats.toList()..sort();
+      });
+  }
+
+  Future<void> _chargerMatieresParClasse(String idClasse) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('enseignement')
+        .where('idEnseignant', isEqualTo: widget.idEnseignant)
+        .where('idClasse', isEqualTo: idClasse)
+        .get();
+    final mats = <String>{};
+    for (final doc in snap.docs) {
+      final m = doc.data()['matiere'] as String? ?? '';
+      if (m.isNotEmpty) mats.add(m);
+    }
+    if (mounted)
+      setState(() {
+        _matieresEnseignant = mats.toList()..sort();
+        if (_matiere != null && !_matieresEnseignant.contains(_matiere))
+          _matiere = null;
+      });
+  }
+
+  Future<void> _chargerEleves(String idClasse) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('utilisateur')
+        .where('role', isEqualTo: 'eleve')
+        .where('idClasse', isEqualTo: idClasse)
+        .get();
+    if (mounted)
+      setState(() {
+        _eleves = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+        _idEtu = null;
+        _nomEtu = null;
+      });
+  }
+
+  Future<void> _enregistrer() async {
+    if (!_fk.currentState!.validate()) return;
+    if (!_estModif && _idEtu == null) {
+      _snack(context, 'Sélectionnez un élève', Colors.orange);
+      return;
+    }
+    if (!_estModif && _matiere == null) {
+      _snack(context, 'Sélectionnez une matière', Colors.orange);
+      return;
+    }
+
+    final vm = context.read<NoteViewModel>();
+    final note = NoteModel(
+      idEleve: _idEtu!,
+      nomEleve: _nomEtu!,
+      matiere: _matiere!,
+      idEnseignant: widget.idEnseignant,
+      semestre: _semestre,
+      devoir1: _parse(_d1.text),
+      devoir2: _parse(_d2.text),
+      devoir3: _parse(_d3.text),
+      compo1: _parse(_c1.text),
+      compo2: _parse(_c2.text),
+    );
+
+    final ok = _estModif
+        ? await vm.modifier(widget.note!.id!, note)
+        : await vm.ajouter(note);
+
+    if (mounted) {
+      _snack(
+        context,
+        ok
+            ? (_estModif ? 'Note modifiée ✓' : 'Note ajoutée ✓')
+            : vm.erreur ?? 'Erreur',
+        ok ? Colors.green : Colors.red,
+      );
+      if (ok) Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final vm = context.watch<NoteViewModel>();
+
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        title: Text(_estModif ? 'Modifier la note' : 'Saisir une note'),
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+      ),
+      body: Form(
+        key: _fk,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Semestre ──────────────────────────────────────────────────────
+              _SectionTitre('Semestre', Icons.calendar_today_rounded),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SemestreBtn(
+                      'Semestre 1',
+                      'S1',
+                      _semestre == 'S1',
+                      scheme,
+                      () => setState(() => _semestre = 'S1'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SemestreBtn(
+                      'Semestre 2',
+                      'S2',
+                      _semestre == 'S2',
+                      scheme,
+                      () => setState(() => _semestre = 'S2'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // ── Classe ────────────────────────────────────────────────────────
+              if (!_estModif) ...[
+                _SectionTitre('Classe', Icons.class_rounded),
+                const SizedBox(height: 12),
+                _classesEnseignant.isEmpty
+                    ? _InfoBox(
+                        'Aucune classe assignée',
+                        Icons.warning_amber_rounded,
+                        scheme,
+                        color: Colors.orange,
+                      )
+                    : DropdownButtonFormField<String>(
+                        value:
+                            _classesEnseignant.any(
+                              (c) => c['id'] == _idClasseFiltre,
+                            )
+                            ? _idClasseFiltre
+                            : null,
+                        decoration: _deco(
+                          'Classe',
+                          Icons.class_rounded,
+                          scheme,
+                        ),
+                        items: _classesEnseignant
+                            .map(
+                              (c) => DropdownMenuItem(
+                                value: c['id'],
+                                child: Text(c['nom'] ?? ''),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          setState(() {
+                            _idClasseFiltre = val;
+                            _eleves = [];
+                            _idEtu = null;
+                          });
+                          if (val != null) {
+                            _chargerEleves(val);
+                            _chargerMatieresParClasse(val);
+                          }
+                        },
+                      ),
+                const SizedBox(height: 16),
+
+                // ── Élève ─────────────────────────────────────────────────────
+                _SectionTitre('Élève', Icons.school_rounded),
+                const SizedBox(height: 12),
+                _idClasseFiltre == null
+                    ? _InfoBox(
+                        'Sélectionnez d\'abord une classe',
+                        Icons.info_outline_rounded,
+                        scheme,
+                        muted: true,
+                      )
+                    : _eleves.isEmpty
+                    ? _InfoBox(
+                        'Aucun élève dans cette classe',
+                        Icons.warning_amber_rounded,
+                        scheme,
+                        color: Colors.orange,
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _eleves.any((e) => e['id'] == _idEtu)
+                            ? _idEtu
+                            : null,
+                        decoration: _deco(
+                          'Sélectionner un élève',
+                          Icons.person_rounded,
+                          scheme,
+                        ),
+                        items: _eleves
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e['id'] as String,
+                                child: Text(e['nomComplet'] as String? ?? ''),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) => setState(() {
+                          _idEtu = val;
+                          _nomEtu =
+                              _eleves.firstWhere(
+                                    (e) => e['id'] == val,
+                                  )['nomComplet']
+                                  as String?;
+                        }),
+                      ),
+                const SizedBox(height: 16),
+
+                // ── Matière ───────────────────────────────────────────────────
+                _SectionTitre('Matière', Icons.book_rounded),
+                const SizedBox(height: 12),
+                _matieresEnseignant.isEmpty
+                    ? _InfoBox(
+                        _idClasseFiltre == null
+                            ? 'Sélectionnez d\'abord une classe'
+                            : 'Aucune matière pour cette classe',
+                        Icons.info_outline_rounded,
+                        scheme,
+                        muted: true,
+                      )
+                    : DropdownButtonFormField<String>(
+                        value: _matieresEnseignant.contains(_matiere)
+                            ? _matiere
+                            : null,
+                        decoration: _deco(
+                          'Sélectionner une matière',
+                          Icons.book_rounded,
+                          scheme,
+                        ),
+                        items: _matieresEnseignant
+                            .map(
+                              (m) => DropdownMenuItem(value: m, child: Text(m)),
+                            )
+                            .toList(),
+                        onChanged: (val) => setState(() => _matiere = val),
+                      ),
+                const SizedBox(height: 20),
+              ] else ...[
+                // En mode modification : afficher élève et matière en lecture seule
+                _InfoBox(_nomEtu ?? '', Icons.person_rounded, scheme),
+                const SizedBox(height: 10),
+                _InfoBox(_matiere ?? '', Icons.book_rounded, scheme),
+                const SizedBox(height: 20),
+              ],
+
+              // ── Devoirs ───────────────────────────────────────────────────────
+              _SectionTitre(
+                'Devoirs (coefficient 1)',
+                Icons.edit_document,
+                color: const Color(0xFF1A6A9A),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _NoteField(
+                      ctrl: _d1,
+                      label: 'Devoir 1',
+                      validator: _validateNote,
+                      color: const Color(0xFF1A6A9A),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _NoteField(
+                      ctrl: _d2,
+                      label: 'Devoir 2',
+                      validator: _validateNote,
+                      color: const Color(0xFF1A6A9A),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _NoteField(
+                      ctrl: _d3,
+                      label: 'Devoir 3',
+                      validator: _validateNote,
+                      color: const Color(0xFF1A6A9A),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // ── Compositions ──────────────────────────────────────────────────
+              _SectionTitre(
+                'Compositions (coefficient 2)',
+                Icons.article_rounded,
+                color: const Color(0xFF7B3FA0),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _NoteField(
+                      ctrl: _c1,
+                      label: 'Compo 1',
+                      validator: _validateNote,
+                      color: const Color(0xFF7B3FA0),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _NoteField(
+                      ctrl: _c2,
+                      label: 'Compo 2',
+                      validator: _validateNote,
+                      color: const Color(0xFF7B3FA0),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              SizedBox(
+                height: 52,
+                child: FilledButton(
+                  onPressed: vm.isLoading ? null : _enregistrer,
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: vm.isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          _estModif
+                              ? 'Enregistrer les modifications'
+                              : 'Enregistrer la note',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DROPDOWNS
 // ════════════════════════════════════════════════════════════════════════════
 class _DropdownFiltre extends StatelessWidget {
   final String hint;
   final String? value;
   final bool actif;
   final List<DropdownMenuItem<String>> items;
-  final List<DropdownMenuItem<String>> extra;
   final void Function(String?) onChanged;
-
   const _DropdownFiltre({
     required this.hint,
     required this.value,
     required this.actif,
     required this.items,
     required this.onChanged,
-    this.extra = const [],
   });
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -358,6 +1095,7 @@ class _DropdownFiltre extends StatelessWidget {
         ),
         child: DropdownButton<String>(
           value: value,
+          isExpanded: true,
           hint: Text(
             hint,
             style: TextStyle(
@@ -365,9 +1103,8 @@ class _DropdownFiltre extends StatelessWidget {
               color: scheme.onSurface.withOpacity(0.5),
             ),
           ),
-          isExpanded: true,
           style: TextStyle(fontSize: 13, color: scheme.onSurface),
-          items: [...extra, ...items],
+          items: items,
           onChanged: onChanged,
         ),
       ),
@@ -375,55 +1112,39 @@ class _DropdownFiltre extends StatelessWidget {
   }
 }
 
-// ── Dropdown matière : admin → collection matiere / élève → ses propres notes
 class _DropdownFiltreMatiere extends StatelessWidget {
-  final String uid;
-  final String role;
-  final String? idClasse;
+  final String uid, role;
   final String? filtreActuel;
   final void Function(String?) onChanged;
-
   const _DropdownFiltreMatiere({
     required this.uid,
     required this.role,
-    required this.idClasse,
     required this.filtreActuel,
     required this.onChanged,
   });
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
-    // Élève : matières uniquement depuis ses propres notes
-    // Admin    : toutes les matières de la collection 'matiere'
-    final Stream<QuerySnapshot> stream;
-    if (role == 'eleve') {
-      stream = FirebaseFirestore.instance
-          .collection('note')
-          .where('idEleve', isEqualTo: uid)
-          .snapshots();
-    } else {
-      stream = FirebaseFirestore.instance
-          .collection('matiere')
-          .orderBy('nom')
-          .snapshots();
-    }
-
+    final stream = role == 'eleve'
+        ? FirebaseFirestore.instance
+              .collection('note')
+              .where('idEleve', isEqualTo: uid)
+              .snapshots()
+        : FirebaseFirestore.instance
+              .collection('matiere')
+              .orderBy('nom')
+              .snapshots();
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (_, snap) {
-        final matieres = <String>{};
-        if (snap.hasData) {
+        final mats = <String>{};
+        if (snap.hasData)
           for (final doc in snap.data!.docs) {
             final d = doc.data() as Map<String, dynamic>;
-            // Pour l'élève le champ s'appelle 'matiere', pour admin c'est 'nom'
             final m = (role == 'eleve' ? d['matiere'] : d['nom']) as String?;
-            if (m != null && m.isNotEmpty) matieres.add(m);
+            if (m != null && m.isNotEmpty) mats.add(m);
           }
-        }
-        final list = matieres.toList()..sort();
-
+        final list = mats.toList()..sort();
         return DropdownButtonHideUnderline(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -438,6 +1159,7 @@ class _DropdownFiltreMatiere extends StatelessWidget {
             ),
             child: DropdownButton<String>(
               value: list.contains(filtreActuel) ? filtreActuel : null,
+              isExpanded: true,
               hint: Text(
                 'Toutes les matières',
                 style: TextStyle(
@@ -445,7 +1167,6 @@ class _DropdownFiltreMatiere extends StatelessWidget {
                   color: scheme.onSurface.withOpacity(0.5),
                 ),
               ),
-              isExpanded: true,
               style: TextStyle(fontSize: 13, color: scheme.onSurface),
               items: [
                 DropdownMenuItem<String>(
@@ -474,20 +1195,15 @@ class _DropdownFiltreMatiere extends StatelessWidget {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// DROPDOWN CLASSES DE L'ENSEIGNANT (depuis enseignement)
-// ════════════════════════════════════════════════════════════════════════════
 class _DropdownClasseEnseignant extends StatelessWidget {
   final String idEnseignant;
   final String? value;
   final void Function(String? id, String? nom) onChanged;
-
   const _DropdownClasseEnseignant({
     required this.idEnseignant,
     required this.value,
     required this.onChanged,
   });
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -497,19 +1213,16 @@ class _DropdownClasseEnseignant extends StatelessWidget {
           .where('idEnseignant', isEqualTo: idEnseignant)
           .snapshots(),
       builder: (_, snap) {
-        // Dédupliquer les classes
-        final Map<String, String> classes = {};
-        if (snap.hasData) {
+        final Map<String, String> cls = {};
+        if (snap.hasData)
           for (final doc in snap.data!.docs) {
             final d = doc.data() as Map<String, dynamic>;
             final id = d['idClasse'] as String? ?? '';
-            final nom = d['nomClasse'] as String? ?? '';
-            if (id.isNotEmpty) classes[id] = nom;
+            final nm = d['nomClasse'] as String? ?? '';
+            if (id.isNotEmpty) cls[id] = nm;
           }
-        }
-        final entries = classes.entries.toList()
+        final entries = cls.entries.toList()
           ..sort((a, b) => a.value.compareTo(b.value));
-
         return DropdownButtonHideUnderline(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -523,7 +1236,7 @@ class _DropdownClasseEnseignant extends StatelessWidget {
               ),
             ),
             child: DropdownButton<String>(
-              value: classes.containsKey(value) ? value : null,
+              value: cls.containsKey(value) ? value : null,
               isExpanded: true,
               hint: Text(
                 'Mes classes',
@@ -551,8 +1264,7 @@ class _DropdownClasseEnseignant extends StatelessWidget {
                   ),
                 ),
               ],
-              onChanged: (val) =>
-                  onChanged(val, val == null ? null : classes[val]),
+              onChanged: (val) => onChanged(val, val == null ? null : cls[val]),
             ),
           ),
         );
@@ -561,44 +1273,34 @@ class _DropdownClasseEnseignant extends StatelessWidget {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// DROPDOWN MATIÈRES DE L'ENSEIGNANT (depuis enseignement)
-// ════════════════════════════════════════════════════════════════════════════
 class _DropdownMatiereEnseignant extends StatelessWidget {
   final String idEnseignant;
-  final String? idClasse;
-  final String? filtreActuel;
+  final String? idClasse, filtreActuel;
   final void Function(String?) onChanged;
-
   const _DropdownMatiereEnseignant({
     required this.idEnseignant,
     required this.idClasse,
     required this.filtreActuel,
     required this.onChanged,
   });
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
     Query q = FirebaseFirestore.instance
         .collection('enseignement')
         .where('idEnseignant', isEqualTo: idEnseignant);
     if (idClasse != null) q = q.where('idClasse', isEqualTo: idClasse);
-
     return StreamBuilder<QuerySnapshot>(
       stream: q.snapshots(),
       builder: (_, snap) {
-        final matieres = <String>{};
-        if (snap.hasData) {
+        final mats = <String>{};
+        if (snap.hasData)
           for (final doc in snap.data!.docs) {
             final m =
                 (doc.data() as Map<String, dynamic>)['matiere'] as String?;
-            if (m != null && m.isNotEmpty) matieres.add(m);
+            if (m != null && m.isNotEmpty) mats.add(m);
           }
-        }
-        final list = matieres.toList()..sort();
-
+        final list = mats.toList()..sort();
         return DropdownButtonHideUnderline(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -650,457 +1352,17 @@ class _DropdownMatiereEnseignant extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CARD NOTE
-// ════════════════════════════════════════════════════════════════════════════
-class _NoteCard extends StatelessWidget {
-  final NoteModel note;
-  final bool peutModifier;
-  const _NoteCard({required this.note, required this.peutModifier});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final vm = context.read<NoteViewModel>();
-    final color = note.mentionColor;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withOpacity(0.4)),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.2)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                note.valeurFormatee,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              Text(
-                '/20',
-                style: TextStyle(color: color.withOpacity(0.7), fontSize: 9),
-              ),
-            ],
-          ),
-        ),
-        title: Text(
-          note.nomEleve,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              _Badge(note.matiere, const Color(0xFF7B3FA0)),
-              _Badge(note.mention, color),
-            ],
-          ),
-        ),
-        trailing: peutModifier
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Modifier',
-                    icon: Icon(
-                      Icons.edit_rounded,
-                      size: 20,
-                      color: scheme.primary,
-                    ),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => FormulaireNote(
-                          note: note,
-                          idEnseignant: note.idEnseignant,
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Supprimer',
-                    icon: Icon(
-                      Icons.delete_rounded,
-                      size: 20,
-                      color: scheme.error,
-                    ),
-                    onPressed: () => _confirmerSuppression(context, vm),
-                  ),
-                ],
-              )
-            : null,
-      ),
-    );
-  }
-
-  void _confirmerSuppression(BuildContext context, NoteViewModel vm) {
-    final scheme = Theme.of(context).colorScheme;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Supprimer la note ?'),
-        content: Text(
-          'La note de ${note.nomEleve} en ${note.matiere} '
-          'sera supprimée.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: scheme.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final ok = await vm.supprimer(note.id!);
-              if (context.mounted)
-                _snack(
-                  context,
-                  ok ? 'Note supprimée' : vm.erreur ?? 'Erreur',
-                  ok ? scheme.error : Colors.orange,
-                );
-            },
-            child: Text('Supprimer', style: TextStyle(color: scheme.onError)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// FORMULAIRE NOTE
-// ════════════════════════════════════════════════════════════════════════════
-class FormulaireNote extends StatefulWidget {
-  final NoteModel? note;
-  final String idEnseignant;
-  const FormulaireNote({super.key, this.note, required this.idEnseignant});
-
-  @override
-  State<FormulaireNote> createState() => _FormulaireNoteState();
-}
-
-class _FormulaireNoteState extends State<FormulaireNote> {
-  final _fk = GlobalKey<FormState>();
-  final _val = TextEditingController();
-
-  String? _idClasseFiltre;
-  String? _idEtu, _nomEtu;
-  String? _matiere;
-  List<Map<String, dynamic>> _eleves = [];
-
-  bool get _estModif => widget.note != null;
-
-  @override
-  void initState() {
-    super.initState();
-    if (_estModif) {
-      final n = widget.note!;
-      _val.text = n.valeurFormatee;
-      _idEtu = n.idEleve;
-      _nomEtu = n.nomEleve;
-      _matiere = n.matiere;
-    }
-  }
-
-  @override
-  void dispose() {
-    _val.dispose();
-    super.dispose();
-  }
-
-  Future<void> _chargerEleves(String idClasse) async {
-    final snap = await FirebaseFirestore.instance
-        .collection('utilisateur')
-        .where('role', isEqualTo: 'eleve')
-        .where('idClasse', isEqualTo: idClasse)
-        .get();
-    if (mounted)
-      setState(() {
-        _eleves = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
-        _idEtu = null;
-        _nomEtu = null;
-      });
-  }
-
-  Future<void> _enregistrer() async {
-    if (!_fk.currentState!.validate()) return;
-    if (_idEtu == null) {
-      _snack(context, 'Sélectionnez un élève', Colors.orange);
-      return;
-    }
-    if (_matiere == null) {
-      _snack(context, 'Sélectionnez une matière', Colors.orange);
-      return;
-    }
-    final v = double.tryParse(_val.text.replaceAll(',', '.'));
-    if (v == null || v < 0 || v > 20) {
-      _snack(context, 'Note entre 0 et 20', Colors.orange);
-      return;
-    }
-
-    final vm = context.read<NoteViewModel>();
-    final note = NoteModel(
-      idEleve: _idEtu!,
-      nomEleve: _nomEtu!,
-      matiere: _matiere!,
-      valeur: v,
-      idEnseignant: widget.idEnseignant,
-    );
-
-    final ok = _estModif
-        ? await vm.modifier(widget.note!.id!, note)
-        : await vm.ajouter(note);
-
-    if (mounted) {
-      _snack(
-        context,
-        ok
-            ? (_estModif ? 'Note modifiée ✓' : 'Note ajoutée ✓')
-            : vm.erreur ?? 'Erreur',
-        ok ? Colors.green : Colors.red,
-      );
-      if (ok) Navigator.pop(context);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final vm = context.watch<NoteViewModel>();
-    final cvm = context.watch<ClasseViewModel>();
-
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      appBar: AppBar(
-        title: Text(_estModif ? 'Modifier la note' : 'Saisir une note'),
-        centerTitle: false,
-        elevation: 0,
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
-      ),
-      body: Form(
-        key: _fk,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── Classe (filtre, non stockée) ────────────────────────────
-              if (!_estModif) ...[
-                _SectionTitre('Classe', Icons.class_rounded),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  value: cvm.classes.any((c) => c.id == _idClasseFiltre)
-                      ? _idClasseFiltre
-                      : null,
-                  decoration: _deco('Classe', Icons.class_rounded, scheme),
-                  items: cvm.classes
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c.id,
-                          child: Text(c.nomClasse),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      _idClasseFiltre = val;
-                      _eleves = [];
-                      _idEtu = null;
-                    });
-                    if (val != null) _chargerEleves(val);
-                  },
-                  validator: (v) => v == null ? 'Classe requise' : null,
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // ── Élève ────────────────────────────────────────────────
-              _SectionTitre('Élève', Icons.school_rounded),
-              const SizedBox(height: 14),
-              if (_estModif)
-                _InfoBox(_nomEtu ?? '', Icons.person_rounded, scheme)
-              else if (_idClasseFiltre == null)
-                _InfoBox(
-                  'Sélectionnez d\'abord une classe',
-                  Icons.info_outline_rounded,
-                  scheme,
-                  muted: true,
-                )
-              else if (_eleves.isEmpty)
-                _InfoBox(
-                  'Aucun élève dans cette classe',
-                  Icons.warning_amber_rounded,
-                  scheme,
-                  color: Colors.orange,
-                )
-              else
-                DropdownButtonFormField<String>(
-                  value: _eleves.any((e) => e['id'] == _idEtu) ? _idEtu : null,
-                  decoration: _deco(
-                    'Sélectionner un élève',
-                    Icons.person_rounded,
-                    scheme,
-                  ),
-                  items: _eleves
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e['id'] as String,
-                          child: Text(e['nomComplet'] as String? ?? ''),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (val) => setState(() {
-                    _idEtu = val;
-                    _nomEtu =
-                        _eleves.firstWhere((e) => e['id'] == val)['nomComplet']
-                            as String?;
-                  }),
-                ),
-              const SizedBox(height: 20),
-
-              // ── Matière (depuis Firestore) ───────────────────────────────
-              _SectionTitre('Matière', Icons.book_rounded),
-              const SizedBox(height: 14),
-              if (_estModif)
-                _InfoBox(_matiere ?? '', Icons.book_rounded, scheme)
-              else
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('matiere')
-                      .orderBy('nom')
-                      .snapshots(),
-                  builder: (_, snap) {
-                    final matieres = snap.hasData
-                        ? snap.data!.docs
-                              .map(
-                                (d) =>
-                                    (d.data() as Map<String, dynamic>)['nom']
-                                        as String,
-                              )
-                              .toList()
-                        : <String>[];
-                    return DropdownButtonFormField<String>(
-                      value: matieres.contains(_matiere) ? _matiere : null,
-                      decoration: _deco(
-                        'Sélectionner une matière',
-                        Icons.book_rounded,
-                        scheme,
-                      ),
-                      items: matieres
-                          .map(
-                            (m) => DropdownMenuItem(value: m, child: Text(m)),
-                          )
-                          .toList(),
-                      onChanged: (val) => setState(() => _matiere = val),
-                      validator: (v) => v == null ? 'Matière requise' : null,
-                    );
-                  },
-                ),
-              const SizedBox(height: 16),
-
-              // ── Valeur ──────────────────────────────────────────────────
-              _SectionTitre('Note', Icons.star_rounded),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _val,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: _deco(
-                  'Valeur (0 – 20)',
-                  Icons.star_rounded,
-                  scheme,
-                ).copyWith(suffixText: '/ 20'),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Note requise';
-                  final n = double.tryParse(v.replaceAll(',', '.'));
-                  if (n == null || n < 0 || n > 20) return 'Entre 0 et 20';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 32),
-
-              SizedBox(
-                height: 52,
-                child: FilledButton(
-                  onPressed: vm.isLoading ? null : _enregistrer,
-                  style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: vm.isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          _estModif
-                              ? 'Enregistrer les modifications'
-                              : 'Enregistrer la note',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// DRAWER PAR RÔLE
+// DRAWER
 // ════════════════════════════════════════════════════════════════════════════
 class _DrawerRole extends StatelessWidget {
   final String role;
-  const _DrawerRole({required this.role});
+  final VoidCallback onDeconnexion;
+  const _DrawerRole({required this.role, required this.onDeconnexion});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final user = FirebaseAuth.instance.currentUser;
-
     IconData icone;
     String titre;
     List<Widget> items;
@@ -1134,6 +1396,12 @@ class _DrawerRole extends StatelessWidget {
             Routeur.routeAbsences,
             false,
           ),
+          _DItem(
+            Icons.description_rounded,
+            'Bulletins',
+            Routeur.routeBulletin,
+            false,
+          ),
           Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
           _DItem(
             Icons.person_outline_rounded,
@@ -1161,6 +1429,12 @@ class _DrawerRole extends StatelessWidget {
             Routeur.routeAbsences,
             false,
           ),
+          _DItem(
+            Icons.description_rounded,
+            'Bulletins',
+            Routeur.routeBulletin,
+            false,
+          ),
           Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
           _DItem(
             Icons.person_outline_rounded,
@@ -1186,6 +1460,12 @@ class _DrawerRole extends StatelessWidget {
             Icons.event_busy_rounded,
             'Mes Absences',
             Routeur.routeAbsences,
+            false,
+          ),
+          _DItem(
+            Icons.description_rounded,
+            'Mon Bulletin',
+            Routeur.routeBulletin,
             false,
           ),
           Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
@@ -1248,46 +1528,9 @@ class _DrawerRole extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      title: const Text('Déconnexion'),
-                      content: const Text(
-                        'Voulez-vous vraiment vous déconnecter ?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Annuler'),
-                        ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: scheme.error,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: Text(
-                            'Déconnecter',
-                            style: TextStyle(color: scheme.onError),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (ok == true && context.mounted) {
-                    await FirebaseAuth.instance.signOut();
-                    if (context.mounted)
-                      Navigator.pushReplacementNamed(
-                        context,
-                        Routeur.routeInitial,
-                      );
-                  }
+                onTap: () {
+                  Navigator.pop(context);
+                  onDeconnexion();
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -1319,7 +1562,7 @@ class _DrawerRole extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// HELPERS
+// HELPERS COMMUNS
 // ════════════════════════════════════════════════════════════════════════════
 class _DItem extends StatelessWidget {
   final IconData icon;
@@ -1400,6 +1643,176 @@ class _DLabel extends StatelessWidget {
   );
 }
 
+class _SectionTitre extends StatelessWidget {
+  final String titre;
+  final IconData icon;
+  final Color? color;
+  const _SectionTitre(this.titre, this.icon, {this.color});
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? Theme.of(context).colorScheme.primary;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: c.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: c),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          titre,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: c),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChipFiltre extends StatelessWidget {
+  final String label;
+  final String? val;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color color;
+  const _ChipFiltre(
+    this.label,
+    this.val,
+    this.selected,
+    this.onTap,
+    this.color,
+  );
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: selected ? color : color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(selected ? 0 : 0.25)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: selected ? Colors.white : color,
+        ),
+      ),
+    ),
+  );
+}
+
+class _SubNote extends StatelessWidget {
+  final String label;
+  final double valeur;
+  final Color color;
+  const _SubNote(this.label, this.valeur, this.color);
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: color.withOpacity(0.2)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$label : ',
+          style: TextStyle(fontSize: 11, color: color.withOpacity(0.7)),
+        ),
+        Text(
+          NoteModel.fmt(valeur),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _NoteField extends StatelessWidget {
+  final TextEditingController ctrl;
+  final String label;
+  final String? Function(String?) validator;
+  final Color color;
+  const _NoteField({
+    required this.ctrl,
+    required this.label,
+    required this.validator,
+    required this.color,
+  });
+  @override
+  Widget build(BuildContext context) => TextFormField(
+    controller: ctrl,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    textAlign: TextAlign.center,
+    decoration: InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(fontSize: 12, color: color),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: color, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      suffixText: '/20',
+      suffixStyle: TextStyle(fontSize: 10, color: color.withOpacity(0.6)),
+    ),
+    validator: validator,
+  );
+}
+
+class _SemestreBtn extends StatelessWidget {
+  final String label, val;
+  final bool selected;
+  final ColorScheme scheme;
+  final VoidCallback onTap;
+  const _SemestreBtn(
+    this.label,
+    this.val,
+    this.selected,
+    this.scheme,
+    this.onTap,
+  );
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: selected ? scheme.primary : scheme.onSurface.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: selected
+              ? scheme.primary
+              : scheme.outlineVariant.withOpacity(0.4),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+            color: selected ? Colors.white : scheme.onSurface.withOpacity(0.7),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _Badge extends StatelessWidget {
   final String text;
   final Color color;
@@ -1421,37 +1834,6 @@ class _Badge extends StatelessWidget {
           fontWeight: FontWeight.w500,
         ),
       ),
-    );
-  }
-}
-
-class _SectionTitre extends StatelessWidget {
-  final String titre;
-  final IconData icon;
-  const _SectionTitre(this.titre, this.icon);
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: scheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 16, color: scheme.primary),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          titre,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 15,
-            color: scheme.primary,
-          ),
-        ),
-      ],
     );
   }
 }

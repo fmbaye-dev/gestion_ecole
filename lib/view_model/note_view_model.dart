@@ -14,12 +14,14 @@ class NoteViewModel extends ChangeNotifier {
 
   // ── Toutes les notes (admin) ───────────────────────────────────────────
   Stream<List<NoteModel>> get streamNotes => _service.streamNotes().map(
-    (s) =>
-        s.docs.map((d) => NoteModel.fromFirestore(d)).toList()
-          ..sort((a, b) => b.valeur.compareTo(a.valeur)),
+    (s) => s.docs.map((d) => NoteModel.fromFirestore(d)).toList()
+      ..sort((a, b) {
+        final cmp = a.matiere.compareTo(b.matiere);
+        return cmp != 0 ? cmp : a.nomEleve.compareTo(b.nomEleve);
+      }),
   );
 
-  // ── Notes d'un élève ────────────────────────────────────────────────
+  // ── Notes d'un élève ────────────────────────────────────────────────────
   Stream<List<NoteModel>> streamEleve(String idEleve) => _service
       .streamNotesEleve(idEleve)
       .map(
@@ -28,7 +30,7 @@ class NoteViewModel extends ChangeNotifier {
               ..sort((a, b) => a.matiere.compareTo(b.matiere)),
       );
 
-  // ── Notes saisies par un enseignant ───────────────────────────────────
+  // ── Notes saisies par un enseignant ──────────────────────────────────────
   Stream<List<NoteModel>> streamEnseignant(String idEnseignant) => _service
       .streamNotesEnseignant(idEnseignant)
       .map(
@@ -37,25 +39,29 @@ class NoteViewModel extends ChangeNotifier {
               ..sort((a, b) => a.matiere.compareTo(b.matiere)),
       );
 
-  // ── Notes filtrées par élève et/ou matière ─────────────────────────
-  // Note : idClasse supprimé — il n'est plus dans le modèle Note
+  // ── Notes filtrées ────────────────────────────────────────────────────────
   Stream<List<NoteModel>> streamFiltrees({
     String? idEleve,
     String? matiere,
     String? idEnseignant,
+    String? semestre,
   }) => _service
       .streamNotesFiltrees(
         idEleve: idEleve,
         matiere: matiere,
         idEnseignant: idEnseignant,
+        semestre: semestre,
       )
       .map(
         (s) =>
             s.docs.map((d) => NoteModel.fromFirestore(d)).toList()
-              ..sort((a, b) => a.nomEleve.compareTo(b.nomEleve)),
+              ..sort((a, b) {
+                final cmp = a.matiere.compareTo(b.matiere);
+                return cmp != 0 ? cmp : a.nomEleve.compareTo(b.nomEleve);
+              }),
       );
 
-  // ── Ajouter ───────────────────────────────────────────────────────────
+  // ── CRUD ──────────────────────────────────────────────────────────────────
   Future<bool> ajouter(NoteModel note) async {
     _setLoading(true);
     try {
@@ -70,7 +76,6 @@ class NoteViewModel extends ChangeNotifier {
     }
   }
 
-  // ── Modifier ──────────────────────────────────────────────────────────
   Future<bool> modifier(String id, NoteModel note) async {
     _setLoading(true);
     try {
@@ -85,7 +90,6 @@ class NoteViewModel extends ChangeNotifier {
     }
   }
 
-  // ── Supprimer ─────────────────────────────────────────────────────────
   Future<bool> supprimer(String id) async {
     _setLoading(true);
     try {
