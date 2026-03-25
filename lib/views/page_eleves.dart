@@ -693,11 +693,12 @@ class _DrawerAdmin extends StatelessWidget {
                   );
                   if (ok == true && context.mounted) {
                     await FirebaseAuth.instance.signOut();
-                    if (context.mounted)
+                    if (context.mounted) {
                       Navigator.pushReplacementNamed(
                         context,
                         Routeur.routeInitial,
                       );
+                    }
                   }
                 },
                 child: Padding(

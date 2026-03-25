@@ -28,7 +28,7 @@ class _PageAbsencesState extends State<PageAbsences> {
   String? _filtreIdClasse;
   String? _filtreNomClasse;
   String? _filtreMatiere;
-  bool? _filtreJustifiee; // null=toutes, true=justifiées, false=non justifiées
+  bool? _filtreJustifiee;
 
   List<String> _idElevesClasse = [];
 
@@ -74,6 +74,42 @@ class _PageAbsencesState extends State<PageAbsences> {
     }
   }
 
+  Future<void> _deconnexion() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Déconnexion'),
+        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Déconnecter',
+              style: TextStyle(color: Theme.of(context).colorScheme.onError),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, Routeur.routeInitial);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -94,12 +130,10 @@ class _PageAbsencesState extends State<PageAbsences> {
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
       ),
-      drawer: _buildDrawer(),
+      drawer: _DrawerRole(role: _role ?? 'eleve', onDeconnexion: _deconnexion),
       body: Column(
         children: [
-          // ── Filtres ─────────────────────────────────────────────────────
           _buildFiltres(),
-          // ── Liste ───────────────────────────────────────────────────────
           Expanded(child: _buildListe()),
         ],
       ),
@@ -130,7 +164,6 @@ class _PageAbsencesState extends State<PageAbsences> {
         children: [
           Row(
             children: [
-              // Filtre Classe (pas pour l'élève)
               if (_role != 'eleve') ...[
                 Expanded(
                   child: _role == 'enseignant'
@@ -176,7 +209,7 @@ class _PageAbsencesState extends State<PageAbsences> {
                 const SizedBox(width: 8),
               ],
 
-              // Filtre Matière
+              // ── CORRECTION : pour enseignant → matières filtrées par ses enseignements
               Expanded(
                 child: _role == 'enseignant'
                     ? _DropdownMatiereEnseignant(
@@ -192,7 +225,6 @@ class _PageAbsencesState extends State<PageAbsences> {
                       ),
               ),
 
-              // Reset
               if (_filtreIdClasse != null ||
                   _filtreMatiere != null ||
                   _filtreJustifiee != null)
@@ -219,7 +251,6 @@ class _PageAbsencesState extends State<PageAbsences> {
           ),
           const SizedBox(height: 10),
 
-          // Chips justifiée
           Row(
             children: [
               _Chip(
@@ -248,7 +279,6 @@ class _PageAbsencesState extends State<PageAbsences> {
             ],
           ),
 
-          // Badge filtre actif
           if (_filtreNomClasse != null || _filtreMatiere != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -303,15 +333,12 @@ class _PageAbsencesState extends State<PageAbsences> {
 
         var list = snap.data ?? [];
 
-        // Filtre justifiée
         if (_filtreJustifiee != null) {
           list = list.where((a) => a.justifiee == _filtreJustifiee).toList();
         }
-        // Filtre matière
         if (_filtreMatiere != null) {
           list = list.where((a) => a.matiere == _filtreMatiere).toList();
         }
-        // Filtre classe (via liste d'IDs élèves)
         if (_filtreIdClasse != null && _idElevesClasse.isNotEmpty) {
           list = list
               .where((a) => _idElevesClasse.contains(a.idEleve))
@@ -354,12 +381,6 @@ class _PageAbsencesState extends State<PageAbsences> {
         );
       },
     );
-  }
-
-  Widget _buildDrawer() {
-    if (_role == 'admin') return const _DrawerRole(role: 'admin');
-    if (_role == 'enseignant') return const _DrawerRole(role: 'enseignant');
-    return const _DrawerRole(role: 'eleve');
   }
 }
 
@@ -451,7 +472,7 @@ class _DropdownFiltre extends StatelessWidget {
 class _DropdownFiltreMatiere extends StatelessWidget {
   final String? filtreActuel;
   final void Function(String?) onChanged;
-  final String? uid; // si fourni → filtre sur les absences de l'élève
+  final String? uid;
   const _DropdownFiltreMatiere({
     required this.filtreActuel,
     required this.onChanged,
@@ -461,8 +482,6 @@ class _DropdownFiltreMatiere extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    // Élève : matières depuis ses absences seulement
-    // Admin    : toutes les matières de la collection 'matiere'
     final stream = uid != null
         ? FirebaseFirestore.instance
               .collection('absence')
@@ -536,7 +555,7 @@ class _DropdownFiltreMatiere extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DROPDOWN CLASSES DE L'ENSEIGNANT
+// DROPDOWN CLASSES DE L'ENSEIGNANT (depuis enseignement)
 // ════════════════════════════════════════════════════════════════════════════
 class _DropdownClasseEnseignant extends StatelessWidget {
   final String idEnseignant;
@@ -619,7 +638,7 @@ class _DropdownClasseEnseignant extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DROPDOWN MATIÈRES DE L'ENSEIGNANT
+// DROPDOWN MATIÈRES DE L'ENSEIGNANT (depuis enseignement — CORRIGÉ)
 // ════════════════════════════════════════════════════════════════════════════
 class _DropdownMatiereEnseignant extends StatelessWidget {
   final String idEnseignant;
@@ -843,7 +862,7 @@ class _AbsenceCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FORMULAIRE ABSENCE
+// FORMULAIRE ABSENCE — CORRIGÉ : classes et matières filtrées enseignant
 // ════════════════════════════════════════════════════════════════════════════
 class FormulaireAbsence extends StatefulWidget {
   final AbsenceModel? absence;
@@ -866,6 +885,10 @@ class _FormulaireAbsenceState extends State<FormulaireAbsence> {
   String? _matiere;
   List<Map<String, dynamic>> _eleves = [];
 
+  // Classes et matières de l'enseignant (depuis enseignement)
+  List<Map<String, String>> _classesEnseignant = [];
+  List<String> _matieresEnseignant = [];
+
   bool get _estModif => widget.absence != null;
 
   @override
@@ -878,6 +901,61 @@ class _FormulaireAbsenceState extends State<FormulaireAbsence> {
       _idEtu = a.idEleve;
       _nomEtu = a.nomEleve;
       _matiere = a.matiere;
+    }
+    _chargerDonneesEnseignant();
+  }
+
+  // Charge les classes et matières assignées à l'enseignant
+  Future<void> _chargerDonneesEnseignant() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('enseignement')
+        .where('idEnseignant', isEqualTo: widget.idEnseignant)
+        .get();
+
+    final Map<String, String> classesMap = {};
+    final Set<String> matieresSet = {};
+
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final idClasse = d['idClasse'] as String? ?? '';
+      final nomClasse = d['nomClasse'] as String? ?? '';
+      final matiere = d['matiere'] as String? ?? '';
+      if (idClasse.isNotEmpty) classesMap[idClasse] = nomClasse;
+      if (matiere.isNotEmpty) matieresSet.add(matiere);
+    }
+
+    if (mounted) {
+      setState(() {
+        _classesEnseignant =
+            classesMap.entries
+                .map((e) => {'id': e.key, 'nom': e.value})
+                .toList()
+              ..sort((a, b) => a['nom']!.compareTo(b['nom']!));
+        _matieresEnseignant = matieresSet.toList()..sort();
+      });
+    }
+  }
+
+  // Filtre les matières selon la classe sélectionnée
+  Future<void> _chargerMatieresParClasse(String idClasse) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('enseignement')
+        .where('idEnseignant', isEqualTo: widget.idEnseignant)
+        .where('idClasse', isEqualTo: idClasse)
+        .get();
+    final matieresSet = <String>{};
+    for (final doc in snap.docs) {
+      final m = (doc.data())['matiere'] as String? ?? '';
+      if (m.isNotEmpty) matieresSet.add(m);
+    }
+    if (mounted) {
+      setState(() {
+        _matieresEnseignant = matieresSet.toList()..sort();
+        // Réinitialiser la matière si elle n'est plus dans la liste
+        if (_matiere != null && !_matieresEnseignant.contains(_matiere)) {
+          _matiere = null;
+        }
+      });
     }
   }
 
@@ -946,7 +1024,6 @@ class _FormulaireAbsenceState extends State<FormulaireAbsence> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final vm = context.watch<AbsenceViewModel>();
-    final cvm = context.watch<ClasseViewModel>();
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -964,36 +1041,49 @@ class _FormulaireAbsenceState extends State<FormulaireAbsence> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Classe ──────────────────────────────────────────────────
+            // ── Classe (uniquement les classes de l'enseignant) ──────────
             if (!_estModif) ...[
               _SectionTitre('Classe', Icons.class_rounded),
               const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                value: cvm.classes.any((c) => c.id == _idClasseFiltre)
-                    ? _idClasseFiltre
-                    : null,
-                decoration: _deco('Classe', Icons.class_rounded, scheme),
-                items: cvm.classes
-                    .map(
-                      (c) => DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.nomClasse),
-                      ),
+              _classesEnseignant.isEmpty
+                  ? _InfoBox(
+                      'Aucune classe assignée',
+                      Icons.warning_amber_rounded,
+                      scheme,
+                      color: Colors.orange,
                     )
-                    .toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _idClasseFiltre = val;
-                    _eleves = [];
-                    _idEtu = null;
-                  });
-                  if (val != null) _chargerEleves(val);
-                },
-              ),
+                  : DropdownButtonFormField<String>(
+                      value:
+                          _classesEnseignant.any(
+                            (c) => c['id'] == _idClasseFiltre,
+                          )
+                          ? _idClasseFiltre
+                          : null,
+                      decoration: _deco('Classe', Icons.class_rounded, scheme),
+                      items: _classesEnseignant
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c['id'],
+                              child: Text(c['nom'] ?? ''),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _idClasseFiltre = val;
+                          _eleves = [];
+                          _idEtu = null;
+                        });
+                        if (val != null) {
+                          _chargerEleves(val);
+                          _chargerMatieresParClasse(val);
+                        }
+                      },
+                    ),
               const SizedBox(height: 16),
             ],
 
-            // ── Élève ────────────────────────────────────────────────
+            // ── Élève ─────────────────────────────────────────────────────
             _SectionTitre('Élève', Icons.school_rounded),
             const SizedBox(height: 14),
             if (_estModif)
@@ -1037,44 +1127,36 @@ class _FormulaireAbsenceState extends State<FormulaireAbsence> {
               ),
             const SizedBox(height: 20),
 
-            // ── Matière ──────────────────────────────────────────────────
+            // ── Matière (uniquement les matières de l'enseignant) ────────
             _SectionTitre('Matière', Icons.book_rounded),
             const SizedBox(height: 14),
             if (_estModif)
               _InfoBox(_matiere ?? '', Icons.book_rounded, scheme)
+            else if (_matieresEnseignant.isEmpty)
+              _InfoBox(
+                _idClasseFiltre == null
+                    ? 'Sélectionnez d\'abord une classe'
+                    : 'Aucune matière pour cette classe',
+                Icons.info_outline_rounded,
+                scheme,
+                muted: true,
+              )
             else
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('matiere')
-                    .orderBy('nom')
-                    .snapshots(),
-                builder: (_, snap) {
-                  final matieres = snap.hasData
-                      ? snap.data!.docs
-                            .map(
-                              (d) =>
-                                  (d.data() as Map<String, dynamic>)['nom']
-                                      as String,
-                            )
-                            .toList()
-                      : <String>[];
-                  return DropdownButtonFormField<String>(
-                    value: matieres.contains(_matiere) ? _matiere : null,
-                    decoration: _deco(
-                      'Sélectionner une matière',
-                      Icons.book_rounded,
-                      scheme,
-                    ),
-                    items: matieres
-                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                        .toList(),
-                    onChanged: (val) => setState(() => _matiere = val),
-                  );
-                },
+              DropdownButtonFormField<String>(
+                value: _matieresEnseignant.contains(_matiere) ? _matiere : null,
+                decoration: _deco(
+                  'Sélectionner une matière',
+                  Icons.book_rounded,
+                  scheme,
+                ),
+                items: _matieresEnseignant
+                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                    .toList(),
+                onChanged: (val) => setState(() => _matiere = val),
               ),
             const SizedBox(height: 20),
 
-            // ── Date ─────────────────────────────────────────────────────
+            // ── Date ──────────────────────────────────────────────────────
             _SectionTitre('Date', Icons.calendar_today_rounded),
             const SizedBox(height: 14),
             InkWell(
@@ -1113,7 +1195,7 @@ class _FormulaireAbsenceState extends State<FormulaireAbsence> {
             ),
             const SizedBox(height: 16),
 
-            // ── Justifiée ────────────────────────────────────────────────
+            // ── Justifiée ─────────────────────────────────────────────────
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1195,11 +1277,12 @@ class _FormulaireAbsenceState extends State<FormulaireAbsence> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DRAWER PAR RÔLE
+// DRAWER PAR RÔLE — CORRIGÉ : déconnexion unifiée via callback
 // ════════════════════════════════════════════════════════════════════════════
 class _DrawerRole extends StatelessWidget {
   final String role;
-  const _DrawerRole({required this.role});
+  final VoidCallback onDeconnexion;
+  const _DrawerRole({required this.role, required this.onDeconnexion});
 
   @override
   Widget build(BuildContext context) {
@@ -1353,47 +1436,9 @@ class _DrawerRole extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () async {
+                onTap: () {
                   Navigator.pop(context);
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      title: const Text('Déconnexion'),
-                      content: const Text(
-                        'Voulez-vous vraiment vous déconnecter ?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Annuler'),
-                        ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: scheme.error,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: Text(
-                            'Déconnecter',
-                            style: TextStyle(color: scheme.onError),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (ok == true && context.mounted) {
-                    await FirebaseAuth.instance.signOut();
-                    if (context.mounted)
-                      Navigator.pushReplacementNamed(
-                        context,
-                        Routeur.routeInitial,
-                      );
-                  }
+                  onDeconnexion();
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
