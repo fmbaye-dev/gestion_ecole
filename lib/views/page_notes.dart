@@ -24,10 +24,12 @@ class _PageNotesState extends State<PageNotes> {
   String? _uid;
   bool _roleCharge = false;
 
+  // Filtres
   String? _filtreIdClasse;
   String? _filtreNomClasse;
   String? _filtreMatiere;
 
+  // Élèves de la classe sélectionnée (pour filtrage côté client)
   List<String> _idElevesClasse = [];
 
   @override
@@ -60,6 +62,7 @@ class _PageNotesState extends State<PageNotes> {
     });
     if (idClasse == null) return;
 
+    // Récupérer les IDs des élèves de cette classe
     final snap = await FirebaseFirestore.instance
         .collection('utilisateur')
         .where('role', isEqualTo: 'eleve')
@@ -69,41 +72,6 @@ class _PageNotesState extends State<PageNotes> {
       setState(() {
         _idElevesClasse = snap.docs.map((d) => d.id).toList();
       });
-  }
-
-  Future<void> _deconnexion() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Déconnexion'),
-        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              'Déconnecter',
-              style: TextStyle(color: Theme.of(context).colorScheme.onError),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (ok == true && mounted) {
-      await FirebaseAuth.instance.signOut();
-      if (mounted)
-        Navigator.pushReplacementNamed(context, Routeur.routeInitial);
-    }
   }
 
   @override
@@ -126,10 +94,12 @@ class _PageNotesState extends State<PageNotes> {
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
       ),
-      drawer: _DrawerRole(role: _role ?? 'eleve', onDeconnexion: _deconnexion),
+      drawer: _buildDrawer(),
       body: Column(
         children: [
+          // ── Filtres ─────────────────────────────────────────────────────────
           _buildFiltres(),
+          // ── Liste ───────────────────────────────────────────────────────────
           Expanded(child: _buildListe()),
         ],
       ),
@@ -148,6 +118,7 @@ class _PageNotesState extends State<PageNotes> {
     );
   }
 
+  // ── Filtres ────────────────────────────────────────────────────────────────
   Widget _buildFiltres() {
     final scheme = Theme.of(context).colorScheme;
     final cvm = context.watch<ClasseViewModel>();
@@ -159,14 +130,17 @@ class _PageNotesState extends State<PageNotes> {
         children: [
           Row(
             children: [
+              // Filtre Classe (pas pour l'élève)
               if (_role != 'eleve') ...[
                 Expanded(
                   child: _role == 'enseignant'
+                      // Enseignant : seulement ses classes via enseignement
                       ? _DropdownClasseEnseignant(
                           idEnseignant: _uid!,
                           value: _filtreIdClasse,
                           onChanged: _onClasseChanged,
                         )
+                      // Admin : toutes les classes
                       : _DropdownFiltre(
                           hint: 'Toutes les classes',
                           value: _filtreIdClasse,
@@ -204,7 +178,7 @@ class _PageNotesState extends State<PageNotes> {
                 const SizedBox(width: 8),
               ],
 
-              // ── CORRECTION : matières filtrées selon le rôle
+              // Filtre Matière (élève : uniquement ses matières depuis ses notes)
               Expanded(
                 child: _role == 'enseignant'
                     ? _DropdownMatiereEnseignant(
@@ -222,6 +196,7 @@ class _PageNotesState extends State<PageNotes> {
                       ),
               ),
 
+              // Bouton reset
               if (_filtreIdClasse != null || _filtreMatiere != null)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
@@ -246,6 +221,7 @@ class _PageNotesState extends State<PageNotes> {
             ],
           ),
 
+          // Badge filtre actif
           if (_filtreIdClasse != null || _filtreMatiere != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -276,6 +252,7 @@ class _PageNotesState extends State<PageNotes> {
     );
   }
 
+  // ── Liste ──────────────────────────────────────────────────────────────────
   Widget _buildListe() {
     final vm = context.watch<NoteViewModel>();
     final scheme = Theme.of(context).colorScheme;
@@ -297,6 +274,7 @@ class _PageNotesState extends State<PageNotes> {
         }).toList();
       });
     } else {
+      // Admin
       stream = vm.streamFiltrees(matiere: _filtreMatiere).map((list) {
         if (_filtreIdClasse != null && _idElevesClasse.isNotEmpty) {
           return list
@@ -334,6 +312,12 @@ class _PageNotesState extends State<PageNotes> {
         );
       },
     );
+  }
+
+  Widget _buildDrawer() {
+    if (_role == 'admin') return const _DrawerRole(role: 'admin');
+    if (_role == 'enseignant') return const _DrawerRole(role: 'enseignant');
+    return const _DrawerRole(role: 'eleve');
   }
 }
 
@@ -391,7 +375,7 @@ class _DropdownFiltre extends StatelessWidget {
   }
 }
 
-// ── Dropdown matière : admin → collection matiere / élève → ses notes
+// ── Dropdown matière : admin → collection matiere / élève → ses propres notes
 class _DropdownFiltreMatiere extends StatelessWidget {
   final String uid;
   final String role;
@@ -411,6 +395,8 @@ class _DropdownFiltreMatiere extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    // Élève : matières uniquement depuis ses propres notes
+    // Admin    : toutes les matières de la collection 'matiere'
     final Stream<QuerySnapshot> stream;
     if (role == 'eleve') {
       stream = FirebaseFirestore.instance
@@ -431,6 +417,7 @@ class _DropdownFiltreMatiere extends StatelessWidget {
         if (snap.hasData) {
           for (final doc in snap.data!.docs) {
             final d = doc.data() as Map<String, dynamic>;
+            // Pour l'élève le champ s'appelle 'matiere', pour admin c'est 'nom'
             final m = (role == 'eleve' ? d['matiere'] : d['nom']) as String?;
             if (m != null && m.isNotEmpty) matieres.add(m);
           }
@@ -510,6 +497,7 @@ class _DropdownClasseEnseignant extends StatelessWidget {
           .where('idEnseignant', isEqualTo: idEnseignant)
           .snapshots(),
       builder: (_, snap) {
+        // Dédupliquer les classes
         final Map<String, String> classes = {};
         if (snap.hasData) {
           for (final doc in snap.data!.docs) {
@@ -574,7 +562,7 @@ class _DropdownClasseEnseignant extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DROPDOWN MATIÈRES DE L'ENSEIGNANT (depuis enseignement — CORRIGÉ)
+// DROPDOWN MATIÈRES DE L'ENSEIGNANT (depuis enseignement)
 // ════════════════════════════════════════════════════════════════════════════
 class _DropdownMatiereEnseignant extends StatelessWidget {
   final String idEnseignant;
@@ -777,7 +765,8 @@ class _NoteCard extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Supprimer la note ?'),
         content: Text(
-          'La note de ${note.nomEleve} en ${note.matiere} sera supprimée.',
+          'La note de ${note.nomEleve} en ${note.matiere} '
+          'sera supprimée.',
         ),
         actions: [
           TextButton(
@@ -810,7 +799,7 @@ class _NoteCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FORMULAIRE NOTE — CORRIGÉ : classes et matières filtrées enseignant
+// FORMULAIRE NOTE
 // ════════════════════════════════════════════════════════════════════════════
 class FormulaireNote extends StatefulWidget {
   final NoteModel? note;
@@ -830,10 +819,6 @@ class _FormulaireNoteState extends State<FormulaireNote> {
   String? _matiere;
   List<Map<String, dynamic>> _eleves = [];
 
-  // Classes et matières assignées à l'enseignant
-  List<Map<String, String>> _classesEnseignant = [];
-  List<String> _matieresEnseignant = [];
-
   bool get _estModif => widget.note != null;
 
   @override
@@ -846,66 +831,12 @@ class _FormulaireNoteState extends State<FormulaireNote> {
       _nomEtu = n.nomEleve;
       _matiere = n.matiere;
     }
-    _chargerDonneesEnseignant();
   }
 
   @override
   void dispose() {
     _val.dispose();
     super.dispose();
-  }
-
-  // Charge les classes et matières assignées à l'enseignant
-  Future<void> _chargerDonneesEnseignant() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('enseignement')
-        .where('idEnseignant', isEqualTo: widget.idEnseignant)
-        .get();
-
-    final Map<String, String> classesMap = {};
-    final Set<String> matieresSet = {};
-
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final idClasse = d['idClasse'] as String? ?? '';
-      final nomClasse = d['nomClasse'] as String? ?? '';
-      final matiere = d['matiere'] as String? ?? '';
-      if (idClasse.isNotEmpty) classesMap[idClasse] = nomClasse;
-      if (matiere.isNotEmpty) matieresSet.add(matiere);
-    }
-
-    if (mounted) {
-      setState(() {
-        _classesEnseignant =
-            classesMap.entries
-                .map((e) => {'id': e.key, 'nom': e.value})
-                .toList()
-              ..sort((a, b) => a['nom']!.compareTo(b['nom']!));
-        _matieresEnseignant = matieresSet.toList()..sort();
-      });
-    }
-  }
-
-  // Filtre les matières selon la classe sélectionnée
-  Future<void> _chargerMatieresParClasse(String idClasse) async {
-    final snap = await FirebaseFirestore.instance
-        .collection('enseignement')
-        .where('idEnseignant', isEqualTo: widget.idEnseignant)
-        .where('idClasse', isEqualTo: idClasse)
-        .get();
-    final matieresSet = <String>{};
-    for (final doc in snap.docs) {
-      final m = (doc.data())['matiere'] as String? ?? '';
-      if (m.isNotEmpty) matieresSet.add(m);
-    }
-    if (mounted) {
-      setState(() {
-        _matieresEnseignant = matieresSet.toList()..sort();
-        if (_matiere != null && !_matieresEnseignant.contains(_matiere)) {
-          _matiere = null;
-        }
-      });
-    }
   }
 
   Future<void> _chargerEleves(String idClasse) async {
@@ -967,6 +898,7 @@ class _FormulaireNoteState extends State<FormulaireNote> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final vm = context.watch<NoteViewModel>();
+    final cvm = context.watch<ClasseViewModel>();
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -984,50 +916,33 @@ class _FormulaireNoteState extends State<FormulaireNote> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Classe (uniquement les classes de l'enseignant) ──────
+              // ── Classe (filtre, non stockée) ────────────────────────────
               if (!_estModif) ...[
                 _SectionTitre('Classe', Icons.class_rounded),
                 const SizedBox(height: 14),
-                _classesEnseignant.isEmpty
-                    ? _InfoBox(
-                        'Aucune classe assignée',
-                        Icons.warning_amber_rounded,
-                        scheme,
-                        color: Colors.orange,
-                      )
-                    : DropdownButtonFormField<String>(
-                        value:
-                            _classesEnseignant.any(
-                              (c) => c['id'] == _idClasseFiltre,
-                            )
-                            ? _idClasseFiltre
-                            : null,
-                        decoration: _deco(
-                          'Classe',
-                          Icons.class_rounded,
-                          scheme,
+                DropdownButtonFormField<String>(
+                  value: cvm.classes.any((c) => c.id == _idClasseFiltre)
+                      ? _idClasseFiltre
+                      : null,
+                  decoration: _deco('Classe', Icons.class_rounded, scheme),
+                  items: cvm.classes
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text(c.nomClasse),
                         ),
-                        items: _classesEnseignant
-                            .map(
-                              (c) => DropdownMenuItem(
-                                value: c['id'],
-                                child: Text(c['nom'] ?? ''),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            _idClasseFiltre = val;
-                            _eleves = [];
-                            _idEtu = null;
-                          });
-                          if (val != null) {
-                            _chargerEleves(val);
-                            _chargerMatieresParClasse(val);
-                          }
-                        },
-                        validator: (v) => v == null ? 'Classe requise' : null,
-                      ),
+                      )
+                      .toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _idClasseFiltre = val;
+                      _eleves = [];
+                      _idEtu = null;
+                    });
+                    if (val != null) _chargerEleves(val);
+                  },
+                  validator: (v) => v == null ? 'Classe requise' : null,
+                ),
                 const SizedBox(height: 16),
               ],
 
@@ -1075,39 +990,47 @@ class _FormulaireNoteState extends State<FormulaireNote> {
                 ),
               const SizedBox(height: 20),
 
-              // ── Matière (uniquement les matières de l'enseignant) ────
+              // ── Matière (depuis Firestore) ───────────────────────────────
               _SectionTitre('Matière', Icons.book_rounded),
               const SizedBox(height: 14),
               if (_estModif)
                 _InfoBox(_matiere ?? '', Icons.book_rounded, scheme)
-              else if (_matieresEnseignant.isEmpty)
-                _InfoBox(
-                  _idClasseFiltre == null
-                      ? 'Sélectionnez d\'abord une classe'
-                      : 'Aucune matière pour cette classe',
-                  Icons.info_outline_rounded,
-                  scheme,
-                  muted: true,
-                )
               else
-                DropdownButtonFormField<String>(
-                  value: _matieresEnseignant.contains(_matiere)
-                      ? _matiere
-                      : null,
-                  decoration: _deco(
-                    'Sélectionner une matière',
-                    Icons.book_rounded,
-                    scheme,
-                  ),
-                  items: _matieresEnseignant
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                      .toList(),
-                  onChanged: (val) => setState(() => _matiere = val),
-                  validator: (v) => v == null ? 'Matière requise' : null,
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('matiere')
+                      .orderBy('nom')
+                      .snapshots(),
+                  builder: (_, snap) {
+                    final matieres = snap.hasData
+                        ? snap.data!.docs
+                              .map(
+                                (d) =>
+                                    (d.data() as Map<String, dynamic>)['nom']
+                                        as String,
+                              )
+                              .toList()
+                        : <String>[];
+                    return DropdownButtonFormField<String>(
+                      value: matieres.contains(_matiere) ? _matiere : null,
+                      decoration: _deco(
+                        'Sélectionner une matière',
+                        Icons.book_rounded,
+                        scheme,
+                      ),
+                      items: matieres
+                          .map(
+                            (m) => DropdownMenuItem(value: m, child: Text(m)),
+                          )
+                          .toList(),
+                      onChanged: (val) => setState(() => _matiere = val),
+                      validator: (v) => v == null ? 'Matière requise' : null,
+                    );
+                  },
                 ),
               const SizedBox(height: 16),
 
-              // ── Valeur ───────────────────────────────────────────────
+              // ── Valeur ──────────────────────────────────────────────────
               _SectionTitre('Note', Icons.star_rounded),
               const SizedBox(height: 14),
               TextFormField(
@@ -1167,12 +1090,11 @@ class _FormulaireNoteState extends State<FormulaireNote> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DRAWER PAR RÔLE — CORRIGÉ : déconnexion via callback
+// DRAWER PAR RÔLE
 // ════════════════════════════════════════════════════════════════════════════
 class _DrawerRole extends StatelessWidget {
   final String role;
-  final VoidCallback onDeconnexion;
-  const _DrawerRole({required this.role, required this.onDeconnexion});
+  const _DrawerRole({required this.role});
 
   @override
   Widget build(BuildContext context) {
@@ -1326,9 +1248,46 @@ class _DrawerRole extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  Navigator.pop(context);
-                  onDeconnexion();
+                onTap: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      title: const Text('Déconnexion'),
+                      content: const Text(
+                        'Voulez-vous vraiment vous déconnecter ?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Annuler'),
+                        ),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: scheme.error,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text(
+                            'Déconnecter',
+                            style: TextStyle(color: scheme.onError),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true && context.mounted) {
+                    await FirebaseAuth.instance.signOut();
+                    if (context.mounted)
+                      Navigator.pushReplacementNamed(
+                        context,
+                        Routeur.routeInitial,
+                      );
+                  }
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(

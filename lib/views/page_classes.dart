@@ -8,6 +8,7 @@ import 'package:gestion_ecole/models/classe_model.dart';
 import 'package:gestion_ecole/view_model/classe_view_model.dart';
 import 'package:gestion_ecole/view_model/eleve_view_model.dart';
 import 'package:gestion_ecole/models/eleve_model.dart';
+import 'package:gestion_ecole/views/page_eleves.dart' show PageDetailEleve;
 
 // ════════════════════════════════════════════════════════════════════════════
 // PAGE LISTE DES CLASSES
@@ -159,7 +160,7 @@ class PageClasses extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          ok ? 'Classe "$nom" créée' : vm.erreur ?? 'Erreur',
+                          ok ? 'Classe "$nom" créée ✓' : vm.erreur ?? 'Erreur',
                           style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                         backgroundColor: ok ? Colors.green : scheme.error,
@@ -438,6 +439,12 @@ class PageElevesClasse extends StatelessWidget {
                           horizontal: 16,
                           vertical: 8,
                         ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PageDetailEleve(eleve: e),
+                          ),
+                        ),
                         leading: CircleAvatar(
                           radius: 20,
                           backgroundColor: scheme.primary.withOpacity(0.1),
@@ -596,7 +603,6 @@ class _DrawerAdmin extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () async {
-                  Navigator.pop(context);
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
