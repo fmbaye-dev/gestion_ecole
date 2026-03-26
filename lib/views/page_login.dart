@@ -10,7 +10,6 @@ import 'package:provider/provider.dart';
 
 class PageLogin extends StatefulWidget {
   const PageLogin({super.key});
-
   @override
   State<PageLogin> createState() => _PageLoginState();
 }
@@ -18,7 +17,6 @@ class PageLogin extends StatefulWidget {
 class _PageLoginState extends State<PageLogin> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-
   bool isLoading = false;
   bool _passwordVisible = false;
 
@@ -37,18 +35,13 @@ class _PageLoginState extends State<PageLogin> {
             email: emailController.text.trim(),
             password: passwordController.text.trim(),
           );
-
       final uid = userCredential.user!.uid;
-
       final doc = await FirebaseFirestore.instance
           .collection('utilisateur')
           .doc(uid)
           .get();
-
       final role = doc.data()?['role'] as String? ?? '';
-
       if (!mounted) return;
-
       switch (role) {
         case 'admin':
           Navigator.pushReplacementNamed(context, Routeur.routeAccueil);
@@ -67,22 +60,35 @@ class _PageLoginState extends State<PageLogin> {
           if (mounted) _snack('Accès non autorisé pour ce compte.');
       }
     } on FirebaseAuthException catch (e) {
+      // ✅ BUG #8 CORRIGÉ : Tous les messages sont en français
+      // Firebase Auth v9+ utilise 'invalid-credential' au lieu de
+      // 'user-not-found' / 'wrong-password'
       String message;
       switch (e.code) {
         case 'user-not-found':
-          message = 'Aucun compte trouvé pour cet email.';
-          break;
         case 'wrong-password':
-          message = 'Mot de passe incorrect.';
+        case 'invalid-credential':
+        case 'INVALID_LOGIN_CREDENTIALS':
+          message =
+              "L'email ou le mot de passe saisi est incorrect ou n'existe pas.";
           break;
         case 'invalid-email':
           message = 'Adresse email invalide.';
           break;
         case 'too-many-requests':
-          message = 'Trop de tentatives. Réessayez plus tard.';
+          message =
+              'Trop de tentatives de connexion. Veuillez réessayer plus tard.';
+          break;
+        case 'user-disabled':
+          message = 'Ce compte a été désactivé. Contactez l\'administrateur.';
+          break;
+        case 'network-request-failed':
+          message =
+              'Erreur de connexion réseau. Vérifiez votre connexion internet.';
           break;
         default:
-          message = e.message ?? 'Erreur de connexion.';
+          message =
+              "L'email ou le mot de passe saisi est incorrect ou n'existe pas.";
       }
       if (mounted) _snack(message);
     } finally {
@@ -112,20 +118,16 @@ class _PageLoginState extends State<PageLogin> {
       backgroundColor: scheme.surface,
       body: Stack(
         children: [
-          // ── Contenu principal ────────────────────────────────────────
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 80, 24, 24),
               child: Column(
                 children: [
-                  // ── Illustration ───────────────────────────────────────────
                   SvgPicture.asset(
                     'assets/images/illustration_login.svg',
                     height: 140,
                   ),
                   const SizedBox(height: 28),
-
-                  // ── Titre ─────────────────────────────────────────────────
                   Text(
                     'Connexion',
                     style: text.headlineSmall?.copyWith(
@@ -141,8 +143,6 @@ class _PageLoginState extends State<PageLogin> {
                     ),
                   ),
                   const SizedBox(height: 36),
-
-                  // ── Carte formulaire ───────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
@@ -162,7 +162,6 @@ class _PageLoginState extends State<PageLogin> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ── Email ────────────────────────────────────────────
                         TextField(
                           controller: emailController,
                           keyboardType: TextInputType.emailAddress,
@@ -198,8 +197,6 @@ class _PageLoginState extends State<PageLogin> {
                           ),
                         ),
                         const SizedBox(height: 16),
-
-                        // ── Mot de passe ─────────────────────────────────────
                         TextField(
                           controller: passwordController,
                           obscureText: !_passwordVisible,
@@ -246,8 +243,6 @@ class _PageLoginState extends State<PageLogin> {
                           ),
                         ),
                         const SizedBox(height: 24),
-
-                        // ── Bouton connexion ─────────────────────────────────
                         SizedBox(
                           height: 52,
                           child: FilledButton(
@@ -283,8 +278,6 @@ class _PageLoginState extends State<PageLogin> {
               ),
             ),
           ),
-
-          // ── Bouton thème positionné en haut à droite ─────────────────
           Positioned(
             top: 40,
             right: 8,
@@ -300,11 +293,10 @@ class _PageLoginState extends State<PageLogin> {
                   color: scheme.onSurface.withOpacity(0.55),
                 ),
                 onPressed: () {
-                  if (appState.estEnModeSombre) {
+                  if (appState.estEnModeSombre)
                     appState.forcerModeClair();
-                  } else {
+                  else
                     appState.forcerModeSombre();
-                  }
                 },
               ),
             ),

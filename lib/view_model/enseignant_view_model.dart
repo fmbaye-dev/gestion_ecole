@@ -1,6 +1,8 @@
 ﻿// lib/view_model/enseignant_view_model.dart
+// pas déconnecter l'administrateur lors de la création d'un enseignant.
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:gestion_ecole/config/app_logger.dart';
 import 'package:gestion_ecole/models/enseignant_model.dart';
@@ -8,7 +10,6 @@ import 'package:gestion_ecole/repositories/firebase_service.dart';
 
 class EnseignantViewModel extends ChangeNotifier {
   final FirebaseService _service = FirebaseService();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLoading = false;
   String? _erreur;
 
@@ -29,17 +30,33 @@ class EnseignantViewModel extends ChangeNotifier {
     String motPasse = '',
   }) async {
     _setLoading(true);
+    FirebaseApp? secondaryApp;
     try {
-      final credential = await _auth.createUserWithEmailAndPassword(
+      // ✅ BUG #7 CORRIGÉ : Utiliser une instance Firebase secondaire
+      // pour ne pas remplacer la session admin courante
+      secondaryApp = await Firebase.initializeApp(
+        name: 'enseignantCreation_${DateTime.now().millisecondsSinceEpoch}',
+        options: Firebase.app().options,
+      );
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
         email: enseignant.email.trim(),
         password: motPasse.trim(),
       );
       final uid = credential.user?.uid;
+
+      // Nettoyage de l'instance secondaire immédiatement après création
+      await secondaryAuth.signOut();
+      await secondaryApp.delete();
+      secondaryApp = null;
+
       await _service.ajouterEnseignantAvecUid(uid!, enseignant.toMap());
-      AppLogger.info('Enseignant créé : $uid');
+      AppLogger.info('Enseignant créé : $uid (admin session préservée)');
       _erreur = null;
       return true;
     } on FirebaseAuthException catch (e) {
+      await _cleanupSecondaryApp(secondaryApp);
       switch (e.code) {
         case 'email-already-in-use':
           _erreur = 'Email déjà utilisé.';
@@ -55,6 +72,7 @@ class EnseignantViewModel extends ChangeNotifier {
       }
       return false;
     } catch (e) {
+      await _cleanupSecondaryApp(secondaryApp);
       _erreur = e.toString();
       return false;
     } finally {
@@ -62,10 +80,17 @@ class EnseignantViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> _cleanupSecondaryApp(FirebaseApp? app) async {
+    if (app == null) return;
+    try {
+      await FirebaseAuth.instanceFor(app: app).signOut();
+      await app.delete();
+    } catch (_) {}
+  }
+
   Future<bool> modifier(String id, EnseignantModel enseignant) async {
     _setLoading(true);
     try {
-      // modifierEnseignant gère la cascade (nomEnseignant dans enseignements)
       await _service.modifierEnseignant(id, enseignant.toMap());
       _erreur = null;
       return true;
@@ -80,7 +105,6 @@ class EnseignantViewModel extends ChangeNotifier {
   Future<bool> supprimer(String id) async {
     _setLoading(true);
     try {
-      // supprimerEnseignant gère la cascade (enseignements + notes + absences)
       await _service.supprimerEnseignant(id);
       _erreur = null;
       return true;

@@ -340,6 +340,7 @@ class PageElevesClasse extends StatelessWidget {
   const PageElevesClasse({super.key, required this.classe});
 
   @override
+
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final vm = context.read<EleveViewModel>();

@@ -58,7 +58,6 @@ class _PageAccueilEleveState extends State<PageAccueilEleve> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Bannière
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -119,7 +118,6 @@ class _PageAccueilEleveState extends State<PageAccueilEleve> {
               ),
             ),
             const SizedBox(height: 24),
-
             Text(
               'Accès rapides',
               style: Theme.of(
@@ -127,8 +125,6 @@ class _PageAccueilEleveState extends State<PageAccueilEleve> {
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 14),
-
-            // Grille accès rapides
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -155,6 +151,16 @@ class _PageAccueilEleveState extends State<PageAccueilEleve> {
                     Routeur.routeAbsences,
                   ),
                 ),
+                // ✅ BUG #1 CORRIGÉ : Accès rapide bulletin ajouté
+                _AccesRapide(
+                  icon: Icons.description_rounded,
+                  label: 'Mon Bulletin',
+                  color: const Color(0xFF7B3FA0),
+                  onTap: () => Navigator.pushReplacementNamed(
+                    context,
+                    Routeur.routeBulletin,
+                  ),
+                ),
                 _AccesRapide(
                   icon: Icons.person_outline_rounded,
                   label: 'Mon Profil',
@@ -173,7 +179,6 @@ class _PageAccueilEleveState extends State<PageAccueilEleve> {
   }
 }
 
-// ── Accès rapide card ─────────────────────────────────────────────────────────
 class _AccesRapide extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -233,7 +238,9 @@ class _AccesRapide extends StatelessWidget {
   }
 }
 
-// ── Drawer élève ──────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// DRAWER ÉLÈVE — BUG #1 CORRIGÉ : Mon Bulletin ajouté
+// ════════════════════════════════════════════════════════════════════════════
 class _DrawerEleve extends StatelessWidget {
   const _DrawerEleve();
 
@@ -304,6 +311,13 @@ class _DrawerEleve extends StatelessWidget {
                   Icons.event_busy_rounded,
                   'Mes Absences',
                   Routeur.routeAbsences,
+                  isActive: false,
+                ),
+                // ✅ BUG #1 CORRIGÉ : Mon Bulletin maintenant visible depuis le dashboard élève
+                _DItem(
+                  Icons.description_rounded,
+                  'Mon Bulletin',
+                  Routeur.routeBulletin,
                   isActive: false,
                 ),
                 Divider(

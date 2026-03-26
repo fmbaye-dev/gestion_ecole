@@ -1,4 +1,5 @@
 ﻿// lib/views/page_accueil_enseignant.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -42,7 +43,6 @@ class _PageAccueilEnseignantState extends State<PageAccueilEnseignant> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Bannière
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -93,7 +93,6 @@ class _PageAccueilEnseignantState extends State<PageAccueilEnseignant> {
               ),
             ),
             const SizedBox(height: 24),
-
             Text(
               'Mes classes & matières',
               style: Theme.of(
@@ -101,8 +100,6 @@ class _PageAccueilEnseignantState extends State<PageAccueilEnseignant> {
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-
-            // Liste des classes de l'enseignant depuis la table Enseignement
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('enseignement')
@@ -198,6 +195,9 @@ class _PageAccueilEnseignantState extends State<PageAccueilEnseignant> {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// DRAWER — BUG #1 CORRIGÉ : Bulletins ajouté
+// ════════════════════════════════════════════════════════════════════════════
 class _DrawerEnseignant extends StatelessWidget {
   final VoidCallback onDeconnexion;
   const _DrawerEnseignant({required this.onDeconnexion});
@@ -253,15 +253,22 @@ class _DrawerEnseignant extends StatelessWidget {
               children: [
                 _DItem(
                   Icons.dashboard_rounded,
-                  "Tableau de bord",
+                  'Tableau de bord',
                   Routeur.routeAccueilEnseignant,
                   isActive: true,
                 ),
-                _DItem(Icons.star_rounded, "Notes", Routeur.routeNotes),
+                const _DLabel('ACADÉMIQUE'),
+                _DItem(Icons.star_rounded, 'Notes', Routeur.routeNotes),
                 _DItem(
                   Icons.event_busy_rounded,
-                  "Absences",
+                  'Absences',
                   Routeur.routeAbsences,
+                ),
+                // ✅ BUG #1 CORRIGÉ : Bulletins maintenant visible depuis le dashboard enseignant
+                _DItem(
+                  Icons.description_rounded,
+                  'Bulletins',
+                  Routeur.routeBulletin,
                 ),
                 Divider(
                   height: 20,
@@ -269,7 +276,7 @@ class _DrawerEnseignant extends StatelessWidget {
                 ),
                 _DItem(
                   Icons.person_outline_rounded,
-                  "Mon Profil",
+                  'Mon Profil',
                   Routeur.routeProfil,
                 ),
               ],
@@ -375,4 +382,22 @@ class _DItem extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DLabel extends StatelessWidget {
+  final String label;
+  const _DLabel(this.label);
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.2,
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+      ),
+    ),
+  );
 }
