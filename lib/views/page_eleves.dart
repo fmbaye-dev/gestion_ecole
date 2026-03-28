@@ -274,7 +274,7 @@ class _PageElevesState extends State<PageEleves> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CARD ÉLÈVE — BUG #3 CORRIGÉ : tap ouvre PageDetailEleve
+// CARD ÉLÈVE — FIX overflow : ListTile remplacé par layout custom
 // ════════════════════════════════════════════════════════════════════════════
 class _EleveCard extends StatelessWidget {
   final EleveModel eleve;
@@ -301,71 +301,103 @@ class _EleveCard extends StatelessWidget {
           ),
         ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        // ✅ BUG #3 CORRIGÉ : Tap ouvre la fiche détail élève
+      // ── Layout custom pour éviter le bottom overflow du ListTile ──────
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => PageDetailEleve(eleve: eleve)),
         ),
-        leading: CircleAvatar(
-          radius: 22,
-          backgroundColor: kColor.withOpacity(0.12),
-          child: Text(
-            eleve.initiales,
-            style: const TextStyle(
-              color: kColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-            ),
-          ),
-        ),
-        title: Text(
-          eleve.nomComplet,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 2),
-            Text(
-              eleve.email,
-              style: TextStyle(
-                fontSize: 12,
-                color: scheme.onSurface.withOpacity(0.55),
-              ),
-            ),
-            Row(
-              children: [
-                if (eleve.nomClasse.isNotEmpty) _Badge(eleve.nomClasse, kColor),
-                if (eleve.nomClasse.isNotEmpty &&
-                    eleve.anneeScolaire.isNotEmpty)
-                  const SizedBox(width: 6),
-                if (eleve.anneeScolaire.isNotEmpty)
-                  _Badge(eleve.anneeScolaire, const Color(0xFF1A3A8F)),
-              ],
-            ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: 'Modifier',
-              icon: Icon(Icons.edit_rounded, size: 20, color: scheme.primary),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FormulaireEleve(eleve: eleve),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Avatar
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: kColor.withOpacity(0.12),
+                child: Text(
+                  eleve.initiales,
+                  style: const TextStyle(
+                    color: kColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                 ),
               ),
-            ),
-            IconButton(
-              tooltip: 'Supprimer',
-              icon: Icon(Icons.delete_rounded, size: 20, color: scheme.error),
-              onPressed: () => _confirmerSuppression(context, vm),
-            ),
-          ],
+              const SizedBox(width: 12),
+              // Infos (Expanded pour ne jamais déborder)
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      eleve.nomComplet,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      eleve.email,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurface.withOpacity(0.55),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // Wrap gère le retour à la ligne automatiquement
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (eleve.nomClasse.isNotEmpty)
+                          _Badge(eleve.nomClasse, kColor),
+                        if (eleve.anneeScolaire.isNotEmpty)
+                          _Badge(eleve.anneeScolaire, const Color(0xFF1A3A8F)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Boutons actions
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Modifier',
+                    icon: Icon(
+                      Icons.edit_rounded,
+                      size: 20,
+                      color: scheme.primary,
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FormulaireEleve(eleve: eleve),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Supprimer',
+                    icon: Icon(
+                      Icons.delete_rounded,
+                      size: 20,
+                      color: scheme.error,
+                    ),
+                    onPressed: () => _confirmerSuppression(context, vm),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -410,9 +442,7 @@ class _EleveCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PAGE DÉTAIL ÉLÈVE — BUG #3 CORRIGÉ
-// Affiche : nom, prénom, classe, contact, résumé notes/absences
-// Accessible pour enseignant et administrateur
+// PAGE DÉTAIL ÉLÈVE
 // ════════════════════════════════════════════════════════════════════════════
 class PageDetailEleve extends StatelessWidget {
   final EleveModel eleve;
@@ -543,7 +573,6 @@ class PageDetailEleve extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // ── Coordonnées ─────────────────────────────────────────
                   _SectionCard(
                     titre: 'Coordonnées',
                     icone: Icons.contact_phone_rounded,
@@ -561,8 +590,6 @@ class PageDetailEleve extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 14),
-
-                  // ── Scolarité ────────────────────────────────────────────
                   _SectionCard(
                     titre: 'Scolarité',
                     icone: Icons.school_rounded,
@@ -576,8 +603,6 @@ class PageDetailEleve extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 14),
-
-                  // ── Résumé notes & absences ──────────────────────────────
                   _ResumeEleveCard(idEleve: eleve.id!),
                   const SizedBox(height: 32),
                 ],
@@ -772,7 +797,6 @@ class _StatItem extends StatelessWidget {
   );
 }
 
-// ── Sections génériques (copiées depuis page_enseignants.dart) ───────────────
 class _SectionCard extends StatelessWidget {
   final String titre;
   final IconData icone;

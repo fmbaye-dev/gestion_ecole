@@ -774,7 +774,7 @@ class _BulletinEleve extends StatelessWidget {
                               'Moyenne générale',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                                fontSize: 10,
                               ),
                             ),
                           ),

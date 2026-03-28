@@ -66,6 +66,7 @@ class _PageAccueilState extends State<PageAccueil> {
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
@@ -76,11 +77,11 @@ class _PageAccueilState extends State<PageAccueil> {
             ),
             child: Icon(icon, size: 20, color: color),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Text(
             value,
             style: TextStyle(
-              fontSize: 26,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
               color: color,
             ),
@@ -145,7 +146,7 @@ class _PageAccueilState extends State<PageAccueil> {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.3,
+          childAspectRatio: 1.1,
           children: [
             _statCard('Élèves', '$nbEleves', Icons.school_rounded, cEleve),
             _statCard(
