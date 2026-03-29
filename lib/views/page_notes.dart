@@ -2,6 +2,11 @@
 // Admin      → toutes les notes, filtre classe + matière + semestre (lecture)
 // Enseignant → ses notes, filtre classe (ses classes) + matière + semestre, saisir/modifier/supprimer
 // Élève      → ses notes, filtre matière + semestre (lecture)
+//
+// Règles métier :
+//   - 2 devoirs (D1, D2) + 1 composition (Compo) par semestre
+//   - Coefficient par matière/classe (collection 'coefficient')
+//   - Un élève ne peut avoir qu'UNE seule note par matière+semestre
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -141,7 +146,7 @@ class _PageNotesState extends State<PageNotes> {
     );
   }
 
-  // ── Filtres ────────────────────────────────────────────────────────────────
+  // ── Filtres ──────────────────────────────────────────────────────────────
   Widget _buildFiltres() {
     final scheme = Theme.of(context).colorScheme;
     final cvm = context.watch<ClasseViewModel>();
@@ -153,7 +158,6 @@ class _PageNotesState extends State<PageNotes> {
         children: [
           Row(
             children: [
-              // ── Filtre classe (admin / enseignant) ─────────────────────────
               if (_role != 'eleve') ...[
                 Expanded(
                   child: _role == 'enseignant'
@@ -196,8 +200,6 @@ class _PageNotesState extends State<PageNotes> {
                 ),
                 const SizedBox(width: 8),
               ],
-
-              // ── Filtre matière ──────────────────────────────────────────────
               Expanded(
                 child: _role == 'enseignant'
                     ? _DropdownMatiereEnseignant(
@@ -213,8 +215,6 @@ class _PageNotesState extends State<PageNotes> {
                         onChanged: (m) => setState(() => _filtreMatiere = m),
                       ),
               ),
-
-              // ── Bouton reset ──────────────────────────────────────────────
               if (_filtreIdClasse != null ||
                   _filtreMatiere != null ||
                   _filtreSemestre != null)
@@ -239,10 +239,7 @@ class _PageNotesState extends State<PageNotes> {
                 ),
             ],
           ),
-
           const SizedBox(height: 8),
-
-          // ── Filtre semestre ─────────────────────────────────────────────────
           Row(
             children: [
               _ChipFiltre(
@@ -270,7 +267,6 @@ class _PageNotesState extends State<PageNotes> {
               ),
             ],
           ),
-
           if (_filtreNomClasse != null || _filtreMatiere != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -301,7 +297,7 @@ class _PageNotesState extends State<PageNotes> {
     );
   }
 
-  // ── Liste ──────────────────────────────────────────────────────────────────
+  // ── Liste ────────────────────────────────────────────────────────────────
   Widget _buildListe() {
     final vm = context.watch<NoteViewModel>();
     final scheme = Theme.of(context).colorScheme;
@@ -370,7 +366,7 @@ class _PageNotesState extends State<PageNotes> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CARD NOTE — affiche toutes les sous-notes
+// CARD NOTE — 2 devoirs + 1 compo
 // ════════════════════════════════════════════════════════════════════════════
 class _NoteCard extends StatelessWidget {
   final NoteModel note;
@@ -403,7 +399,7 @@ class _NoteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── En-tête ──────────────────────────────────────────────────────
+            // ── En-tête ────────────────────────────────────────────────────
             Row(
               children: [
                 Expanded(
@@ -425,6 +421,11 @@ class _NoteCard extends StatelessWidget {
                           _Badge(
                             note.semestre == 'S1' ? 'Semestre 1' : 'Semestre 2',
                             const Color(0xFF1A3A8F),
+                          ),
+                          const SizedBox(width: 6),
+                          _Badge(
+                            'Coeff. ${NoteModel.fmt(note.coefficient)}',
+                            const Color(0xFFC0692A),
                           ),
                         ],
                       ),
@@ -494,11 +495,11 @@ class _NoteCard extends StatelessWidget {
               ],
             ),
 
-            // ── Détail des sous-notes ─────────────────────────────────────────
             const SizedBox(height: 10),
             Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
             const SizedBox(height: 10),
 
+            // ── Sous-notes : D1, D2, Compo ─────────────────────────────────
             Wrap(
               spacing: 8,
               runSpacing: 6,
@@ -507,17 +508,13 @@ class _NoteCard extends StatelessWidget {
                   _SubNote('D1', note.devoir1!, const Color(0xFF1A6A9A)),
                 if (note.devoir2 != null)
                   _SubNote('D2', note.devoir2!, const Color(0xFF1A6A9A)),
-                if (note.devoir3 != null)
-                  _SubNote('D3', note.devoir3!, const Color(0xFF1A6A9A)),
-                if (note.compo1 != null)
-                  _SubNote('C1', note.compo1!, const Color(0xFF7B3FA0)),
-                if (note.compo2 != null)
-                  _SubNote('C2', note.compo2!, const Color(0xFF7B3FA0)),
+                if (note.compo != null)
+                  _SubNote('Compo', note.compo!, const Color(0xFF7B3FA0)),
               ],
             ),
 
             // Moyennes partielles
-            if (note.moyenneDevoirs != null || note.moyenneCompos != null) ...[
+            if (note.moyenneDevoirs != null || note.compo != null) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -539,16 +536,16 @@ class _NoteCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 16),
                   ],
-                  if (note.moyenneCompos != null) ...[
+                  if (note.compo != null) ...[
                     Text(
-                      'Moy. Compos : ',
+                      'Compo : ',
                       style: TextStyle(
                         fontSize: 11,
                         color: scheme.onSurface.withOpacity(0.5),
                       ),
                     ),
                     Text(
-                      NoteModel.fmt(note.moyenneCompos),
+                      NoteModel.fmt(note.compo),
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -618,7 +615,11 @@ class _NoteCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FORMULAIRE NOTE — devoir1/2/3 + compo1/2 + semestre
+// FORMULAIRE NOTE
+// Règles :
+//   - 2 devoirs (D1, D2) + 1 composition
+//   - Coefficient par matière/classe chargé depuis Firestore
+//   - Vérification unicité : un élève ne peut avoir qu'une note par matière+semestre
 // ════════════════════════════════════════════════════════════════════════════
 class FormulaireNote extends StatefulWidget {
   final NoteModel? note;
@@ -633,15 +634,18 @@ class _FormulaireNoteState extends State<FormulaireNote> {
 
   final _d1 = TextEditingController();
   final _d2 = TextEditingController();
-  final _d3 = TextEditingController();
-  final _c1 = TextEditingController();
-  final _c2 = TextEditingController();
+  final _compo = TextEditingController();
 
   String _semestre = 'S1';
   String? _idClasseFiltre, _idEtu, _nomEtu, _matiere;
+  double _coefficient = 1.0;
   List<Map<String, dynamic>> _eleves = [];
   List<Map<String, String>> _classesEnseignant = [];
   List<String> _matieresEnseignant = [];
+
+  // IDs des notes déjà existantes pour l'élève sélectionné (matiere+semestre)
+  Set<String> _notesExistantes = {};
+  bool _chargementCoeff = false;
 
   bool get _estModif => widget.note != null;
 
@@ -654,18 +658,17 @@ class _FormulaireNoteState extends State<FormulaireNote> {
       _idEtu = n.idEleve;
       _nomEtu = n.nomEleve;
       _matiere = n.matiere;
+      _coefficient = n.coefficient;
       if (n.devoir1 != null) _d1.text = NoteModel.fmt(n.devoir1);
       if (n.devoir2 != null) _d2.text = NoteModel.fmt(n.devoir2);
-      if (n.devoir3 != null) _d3.text = NoteModel.fmt(n.devoir3);
-      if (n.compo1 != null) _c1.text = NoteModel.fmt(n.compo1);
-      if (n.compo2 != null) _c2.text = NoteModel.fmt(n.compo2);
+      if (n.compo != null) _compo.text = NoteModel.fmt(n.compo);
     }
     _chargerDonneesEnseignant();
   }
 
   @override
   void dispose() {
-    for (final c in [_d1, _d2, _d3, _c1, _c2]) c.dispose();
+    for (final c in [_d1, _d2, _compo]) c.dispose();
     super.dispose();
   }
 
@@ -676,7 +679,7 @@ class _FormulaireNoteState extends State<FormulaireNote> {
   }
 
   String? _validateNote(String? v) {
-    if (v == null || v.trim().isEmpty) return null; // nullable
+    if (v == null || v.trim().isEmpty) return null;
     final n = double.tryParse(v.trim().replaceAll(',', '.'));
     if (n == null || n < 0 || n > 20) return 'Entre 0 et 20';
     return null;
@@ -736,7 +739,57 @@ class _FormulaireNoteState extends State<FormulaireNote> {
         _eleves = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
         _idEtu = null;
         _nomEtu = null;
+        _notesExistantes = {};
       });
+  }
+
+  /// Charge les notes déjà saisies pour cet élève → pour bloquer les doublons
+  Future<void> _chargerNotesExistantes(String idEleve) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('note')
+        .where('idEleve', isEqualTo: idEleve)
+        .get();
+    if (mounted) {
+      setState(() {
+        // Clé = "matiere|semestre"
+        _notesExistantes = snap.docs
+            .map((d) {
+              final data = d.data();
+              // Exclure la note en cours de modification
+              if (_estModif && d.id == widget.note!.id) return '';
+              return '${data['matiere']}|${data['semestre']}';
+            })
+            .where((k) => k.isNotEmpty)
+            .toSet();
+      });
+    }
+  }
+
+  /// Charge le coefficient de la matière pour la classe sélectionnée
+  Future<void> _chargerCoefficient(String idClasse, String matiere) async {
+    setState(() => _chargementCoeff = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('coefficient')
+          .where('idClasse', isEqualTo: idClasse)
+          .where('matiere', isEqualTo: matiere)
+          .limit(1)
+          .get();
+      if (mounted) {
+        setState(() {
+          _coefficient = snap.docs.isEmpty
+              ? 1.0
+              : (snap.docs.first.data()['valeur'] as num?)?.toDouble() ?? 1.0;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _chargementCoeff = false);
+    }
+  }
+
+  bool _noteDejaExistante() {
+    if (_idEtu == null || _matiere == null) return false;
+    return _notesExistantes.contains('$_matiere|$_semestre');
   }
 
   Future<void> _enregistrer() async {
@@ -749,6 +802,14 @@ class _FormulaireNoteState extends State<FormulaireNote> {
       _snack(context, 'Sélectionnez une matière', Colors.orange);
       return;
     }
+    if (!_estModif && _noteDejaExistante()) {
+      _snack(
+        context,
+        'Cet élève a déjà une note en $_matiere pour le $_semestre.\nModifiez la note existante.',
+        Colors.orange,
+      );
+      return;
+    }
 
     final vm = context.read<NoteViewModel>();
     final note = NoteModel(
@@ -759,9 +820,8 @@ class _FormulaireNoteState extends State<FormulaireNote> {
       semestre: _semestre,
       devoir1: _parse(_d1.text),
       devoir2: _parse(_d2.text),
-      devoir3: _parse(_d3.text),
-      compo1: _parse(_c1.text),
-      compo2: _parse(_c2.text),
+      compo: _parse(_compo.text),
+      coefficient: _coefficient,
     );
 
     final ok = _estModif
@@ -784,6 +844,7 @@ class _FormulaireNoteState extends State<FormulaireNote> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final vm = context.watch<NoteViewModel>();
+    final noteBloquee = !_estModif && _noteDejaExistante();
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -801,7 +862,7 @@ class _FormulaireNoteState extends State<FormulaireNote> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Semestre ──────────────────────────────────────────────────────
+              // ── Semestre ────────────────────────────────────────────────
               _SectionTitre('Semestre', Icons.calendar_today_rounded),
               const SizedBox(height: 12),
               Row(
@@ -812,7 +873,10 @@ class _FormulaireNoteState extends State<FormulaireNote> {
                       'S1',
                       _semestre == 'S1',
                       scheme,
-                      () => setState(() => _semestre = 'S1'),
+                      () => setState(() {
+                        _semestre = 'S1';
+                        if (_idEtu != null) _chargerNotesExistantes(_idEtu!);
+                      }),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -822,14 +886,17 @@ class _FormulaireNoteState extends State<FormulaireNote> {
                       'S2',
                       _semestre == 'S2',
                       scheme,
-                      () => setState(() => _semestre = 'S2'),
+                      () => setState(() {
+                        _semestre = 'S2';
+                        if (_idEtu != null) _chargerNotesExistantes(_idEtu!);
+                      }),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
 
-              // ── Classe ────────────────────────────────────────────────────────
+              // ── Classe (seulement en création) ──────────────────────────
               if (!_estModif) ...[
                 _SectionTitre('Classe', Icons.class_rounded),
                 const SizedBox(height: 12),
@@ -865,6 +932,9 @@ class _FormulaireNoteState extends State<FormulaireNote> {
                             _idClasseFiltre = val;
                             _eleves = [];
                             _idEtu = null;
+                            _matiere = null;
+                            _coefficient = 1.0;
+                            _notesExistantes = {};
                           });
                           if (val != null) {
                             _chargerEleves(val);
@@ -874,7 +944,7 @@ class _FormulaireNoteState extends State<FormulaireNote> {
                       ),
                 const SizedBox(height: 16),
 
-                // ── Élève ─────────────────────────────────────────────────────
+                // ── Élève ─────────────────────────────────────────────────
                 _SectionTitre('Élève', Icons.school_rounded),
                 const SizedBox(height: 12),
                 _idClasseFiltre == null
@@ -908,18 +978,21 @@ class _FormulaireNoteState extends State<FormulaireNote> {
                               ),
                             )
                             .toList(),
-                        onChanged: (val) => setState(() {
-                          _idEtu = val;
-                          _nomEtu =
-                              _eleves.firstWhere(
-                                    (e) => e['id'] == val,
-                                  )['nomComplet']
-                                  as String?;
-                        }),
+                        onChanged: (val) async {
+                          setState(() {
+                            _idEtu = val;
+                            _nomEtu =
+                                _eleves.firstWhere(
+                                      (e) => e['id'] == val,
+                                    )['nomComplet']
+                                    as String?;
+                          });
+                          if (val != null) await _chargerNotesExistantes(val);
+                        },
                       ),
                 const SizedBox(height: 16),
 
-                // ── Matière ───────────────────────────────────────────────────
+                // ── Matière ───────────────────────────────────────────────
                 _SectionTitre('Matière', Icons.book_rounded),
                 const SizedBox(height: 12),
                 _matieresEnseignant.isEmpty
@@ -940,124 +1013,263 @@ class _FormulaireNoteState extends State<FormulaireNote> {
                           Icons.book_rounded,
                           scheme,
                         ),
-                        items: _matieresEnseignant
-                            .map(
-                              (m) => DropdownMenuItem(value: m, child: Text(m)),
-                            )
-                            .toList(),
-                        onChanged: (val) => setState(() => _matiere = val),
+                        items: _matieresEnseignant.map((m) {
+                          final deja =
+                              _idEtu != null &&
+                              _notesExistantes.contains('$m|$_semestre');
+                          return DropdownMenuItem(
+                            value: m,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    m,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (deja) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'Déjà noté',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) async {
+                          setState(() => _matiere = val);
+                          if (val != null && _idClasseFiltre != null)
+                            await _chargerCoefficient(_idClasseFiltre!, val);
+                        },
                       ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+
+                // ── Alerte doublon ────────────────────────────────────────
+                if (noteBloquee)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.orange,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Cet élève a déjà une note pour cette matière et ce semestre. Veuillez modifier la note existante.',
+                            style: TextStyle(
+                              color: Colors.orange,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                if (!noteBloquee) const SizedBox(height: 0),
               ] else ...[
-                // En mode modification : afficher élève et matière en lecture seule
                 _InfoBox(_nomEtu ?? '', Icons.person_rounded, scheme),
                 const SizedBox(height: 10),
                 _InfoBox(_matiere ?? '', Icons.book_rounded, scheme),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
               ],
 
-              // ── Devoirs ───────────────────────────────────────────────────────
-              _SectionTitre(
-                'Devoirs (coefficient 1)',
-                Icons.edit_document,
-                color: const Color(0xFF1A6A9A),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _NoteField(
-                      ctrl: _d1,
-                      label: 'Devoir 1',
-                      validator: _validateNote,
-                      color: const Color(0xFF1A6A9A),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _NoteField(
-                      ctrl: _d2,
-                      label: 'Devoir 2',
-                      validator: _validateNote,
-                      color: const Color(0xFF1A6A9A),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _NoteField(
-                      ctrl: _d3,
-                      label: 'Devoir 3',
-                      validator: _validateNote,
-                      color: const Color(0xFF1A6A9A),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // ── Compositions ──────────────────────────────────────────────────
-              _SectionTitre(
-                'Compositions (coefficient 2)',
-                Icons.article_rounded,
-                color: const Color(0xFF7B3FA0),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _NoteField(
-                      ctrl: _c1,
-                      label: 'Compo 1',
-                      validator: _validateNote,
-                      color: const Color(0xFF7B3FA0),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _NoteField(
-                      ctrl: _c2,
-                      label: 'Compo 2',
-                      validator: _validateNote,
-                      color: const Color(0xFF7B3FA0),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-
-              SizedBox(
-                height: 52,
-                child: FilledButton(
-                  onPressed: vm.isLoading ? null : _enregistrer,
-                  style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: vm.isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          _estModif
-                              ? 'Enregistrer les modifications'
-                              : 'Enregistrer la note',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+              // ── Coefficient ──────────────────────────────────────────────
+              if (!noteBloquee) ...[
+                _SectionTitre(
+                  'Coefficient de la matière',
+                  Icons.calculate_rounded,
+                  color: const Color(0xFFC0692A),
                 ),
-              ),
+                const SizedBox(height: 12),
+                _estModif
+                    ? _InfoBox(
+                        'Coefficient : ${NoteModel.fmt(_coefficient)}',
+                        Icons.calculate_rounded,
+                        scheme,
+                      )
+                    : _chargementCoeff
+                    ? const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : _CoefficientSelector(
+                        valeur: _coefficient,
+                        onChanged: _estModif
+                            ? null
+                            : (v) => setState(() => _coefficient = v),
+                      ),
+                const SizedBox(height: 20),
+
+                // ── Devoirs ──────────────────────────────────────────────
+                _SectionTitre(
+                  'Devoirs',
+                  Icons.edit_document,
+                  color: const Color(0xFF1A6A9A),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _NoteField(
+                        ctrl: _d1,
+                        label: 'Devoir 1',
+                        validator: _validateNote,
+                        color: const Color(0xFF1A6A9A),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _NoteField(
+                        ctrl: _d2,
+                        label: 'Devoir 2',
+                        validator: _validateNote,
+                        color: const Color(0xFF1A6A9A),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // ── Composition ──────────────────────────────────────────
+                _SectionTitre(
+                  'Composition',
+                  Icons.article_rounded,
+                  color: const Color(0xFF7B3FA0),
+                ),
+                const SizedBox(height: 12),
+                _NoteField(
+                  ctrl: _compo,
+                  label: 'Composition',
+                  validator: _validateNote,
+                  color: const Color(0xFF7B3FA0),
+                ),
+                const SizedBox(height: 32),
+
+                SizedBox(
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: vm.isLoading ? null : _enregistrer,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: vm.isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _estModif
+                                ? 'Enregistrer les modifications'
+                                : 'Enregistrer la note',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SÉLECTEUR DE COEFFICIENT
+// ════════════════════════════════════════════════════════════════════════════
+class _CoefficientSelector extends StatelessWidget {
+  final double valeur;
+  final void Function(double)? onChanged;
+  const _CoefficientSelector({required this.valeur, required this.onChanged});
+
+  static const _valeurs = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final couleur = const Color(0xFFC0692A);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _valeurs.map((v) {
+            final selected = (v - valeur).abs() < 0.01;
+            return GestureDetector(
+              onTap: onChanged == null ? null : () => onChanged!(v),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: selected ? couleur : couleur.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: couleur.withOpacity(selected ? 0 : 0.3),
+                  ),
+                ),
+                child: Text(
+                  'Coeff. ${NoteModel.fmt(v)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : couleur,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Coefficient actuel : ${NoteModel.fmt(valeur)}',
+          style: TextStyle(
+            fontSize: 12,
+            color: scheme.onSurface.withOpacity(0.5),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1662,9 +1874,15 @@ class _SectionTitre extends StatelessWidget {
           child: Icon(icon, size: 16, color: c),
         ),
         const SizedBox(width: 10),
-        Text(
-          titre,
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: c),
+        Expanded(
+          child: Text(
+            titre,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: c,
+            ),
+          ),
         ),
       ],
     );

@@ -1,8 +1,13 @@
 // lib/views/page_bulletin.dart
 //
-// Élève      → son propre bulletin
-// Enseignant → bulletins des élèves de ses classes
-// Admin      → bulletins de tous les élèves
+// Bulletin conforme au modèle physique :
+//   Colonnes : Discipline | Devoir | Comp | Moy/20 | Coef | Moy×Coef | Appréciations
+//
+// Formules :
+//   Moy.Devoirs     = (D1 + D2) / 2
+//   Moy.Matière/20  = (Moy.Devoirs + Compo) / 2
+//   Moy.Pondérée    = Moy.Matière × Coeff
+//   Moy.Générale    = Σ(Moy.Pondérée) / Σ(Coeff)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,9 +28,8 @@ class _PageBulletinState extends State<PageBulletin> {
   String? _role, _uid;
   bool _roleCharge = false;
   String _semestre = 'S1';
-  String? _filtreIdClasse, _filtreNomClasse, _filtreIdEleve, _filtreNomEleve;
+  String? _filtreIdClasse, _filtreIdEleve, _filtreNomEleve;
 
-  // Listes chargées depuis Firestore
   List<Map<String, String>> _classesEnseignant = [];
   List<Map<String, String>> _elevesClasse = [];
 
@@ -50,7 +54,6 @@ class _PageBulletinState extends State<PageBulletin> {
         _roleCharge = true;
       });
       if (role == 'eleve') {
-        // Élève voit son propre bulletin
         _filtreIdEleve = user.uid;
         _filtreNomEleve = doc.data()?['nomComplet'] as String? ?? '';
       } else if (role == 'enseignant') {
@@ -82,7 +85,6 @@ class _PageBulletinState extends State<PageBulletin> {
   Future<void> _onClasseChanged(String? idClasse, String? nomClasse) async {
     setState(() {
       _filtreIdClasse = idClasse;
-      _filtreNomClasse = nomClasse;
       _filtreIdEleve = null;
       _filtreNomEleve = null;
       _elevesClasse = [];
@@ -149,7 +151,7 @@ class _PageBulletinState extends State<PageBulletin> {
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
-        title: const Text('Bulletin'),
+        title: const Text('Bulletin de notes'),
         centerTitle: false,
         elevation: 0,
         backgroundColor: scheme.surface,
@@ -165,7 +167,7 @@ class _PageBulletinState extends State<PageBulletin> {
     );
   }
 
-  // ── Filtres ──────────────────────────────────────────────────────────────
+  // ── Filtres ────────────────────────────────────────────────────────────────
   Widget _buildFiltres(ColorScheme scheme) {
     return Container(
       color: scheme.surface,
@@ -173,91 +175,78 @@ class _PageBulletinState extends State<PageBulletin> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Semestre ──────────────────────────────────────────────────────
           Row(
             children: [
-              _ChipFiltre(
-                'Semestre 1',
-                'S1',
-                _semestre == 'S1',
-                () => setState(() => _semestre = 'S1'),
-                const Color(0xFF2A8A5C),
-              ),
+              _ChipFiltre('Semestre 1', 'S1', _semestre == 'S1', () {
+                setState(() {
+                  _semestre = 'S1';
+                  if (_role == 'eleve')
+                    _filtreIdEleve = FirebaseAuth.instance.currentUser?.uid;
+                });
+              }, const Color(0xFF2A8A5C)),
               const SizedBox(width: 8),
-              _ChipFiltre(
-                'Semestre 2',
-                'S2',
-                _semestre == 'S2',
-                () => setState(() => _semestre = 'S2'),
-                const Color(0xFF7B3FA0),
-              ),
+              _ChipFiltre('Semestre 2', 'S2', _semestre == 'S2', () {
+                setState(() {
+                  _semestre = 'S2';
+                  if (_role == 'eleve')
+                    _filtreIdEleve = FirebaseAuth.instance.currentUser?.uid;
+                });
+              }, const Color(0xFF7B3FA0)),
             ],
           ),
 
           if (_role != 'eleve') ...[
             const SizedBox(height: 10),
 
-            // ── Filtre classe ─────────────────────────────────────────────────
+            // Filtre classe enseignant
             if (_role == 'enseignant' && _classesEnseignant.isNotEmpty)
-              DropdownButtonHideUnderline(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: scheme.onSurface.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: _filtreIdClasse != null
-                          ? scheme.primary.withOpacity(0.5)
-                          : scheme.outlineVariant.withOpacity(0.4),
+              _dropdownBox(
+                scheme: scheme,
+                actif: _filtreIdClasse != null,
+                child: DropdownButton<String>(
+                  value:
+                      _classesEnseignant.any((c) => c['id'] == _filtreIdClasse)
+                      ? _filtreIdClasse
+                      : null,
+                  isExpanded: true,
+                  hint: Text(
+                    'Sélectionner une classe',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: scheme.onSurface.withOpacity(0.5),
                     ),
                   ),
-                  child: DropdownButton<String>(
-                    value:
-                        _classesEnseignant.any(
-                          (c) => c['id'] == _filtreIdClasse,
-                        )
-                        ? _filtreIdClasse
-                        : null,
-                    isExpanded: true,
-                    hint: Text(
-                      'Sélectionner une classe',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: scheme.onSurface.withOpacity(0.5),
+                  style: TextStyle(fontSize: 13, color: scheme.onSurface),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: null,
+                      child: Text(
+                        'Toutes mes classes',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: scheme.onSurface.withOpacity(0.5),
+                        ),
                       ),
                     ),
-                    style: TextStyle(fontSize: 13, color: scheme.onSurface),
-                    items: [
-                      DropdownMenuItem<String>(
-                        value: null,
-                        child: Text(
-                          'Toutes mes classes',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: scheme.onSurface.withOpacity(0.5),
-                          ),
-                        ),
+                    ..._classesEnseignant.map(
+                      (c) => DropdownMenuItem(
+                        value: c['id'],
+                        child: Text(c['nom'] ?? ''),
                       ),
-                      ..._classesEnseignant.map(
-                        (c) => DropdownMenuItem(
-                          value: c['id'],
-                          child: Text(c['nom'] ?? ''),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      final nom = val == null
-                          ? null
-                          : _classesEnseignant.firstWhere(
-                              (c) => c['id'] == val,
-                            )['nom'];
-                      _onClasseChanged(val, nom);
-                    },
-                  ),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    final nom = val == null
+                        ? null
+                        : _classesEnseignant.firstWhere(
+                            (c) => c['id'] == val,
+                          )['nom'];
+                    _onClasseChanged(val, nom);
+                  },
                 ),
               ),
 
-            // Admin → filtre toutes classes
+            // Filtre classe admin
             if (_role == 'admin')
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -277,118 +266,96 @@ class _PageBulletinState extends State<PageBulletin> {
                             .toList()
                       : <Map<String, String>>[];
                   classes.sort((a, b) => a['nom']!.compareTo(b['nom']!));
-                  return DropdownButtonHideUnderline(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: scheme.onSurface.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: _filtreIdClasse != null
-                              ? scheme.primary.withOpacity(0.5)
-                              : scheme.outlineVariant.withOpacity(0.4),
+                  return _dropdownBox(
+                    scheme: scheme,
+                    actif: _filtreIdClasse != null,
+                    child: DropdownButton<String>(
+                      value: classes.any((c) => c['id'] == _filtreIdClasse)
+                          ? _filtreIdClasse
+                          : null,
+                      isExpanded: true,
+                      hint: Text(
+                        'Toutes les classes',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: scheme.onSurface.withOpacity(0.5),
                         ),
                       ),
-                      child: DropdownButton<String>(
-                        value: classes.any((c) => c['id'] == _filtreIdClasse)
-                            ? _filtreIdClasse
-                            : null,
-                        isExpanded: true,
-                        hint: Text(
-                          'Toutes les classes',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: scheme.onSurface.withOpacity(0.5),
+                      style: TextStyle(fontSize: 13, color: scheme.onSurface),
+                      items: [
+                        DropdownMenuItem<String>(
+                          value: null,
+                          child: Text(
+                            'Toutes les classes',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: scheme.onSurface.withOpacity(0.5),
+                            ),
                           ),
                         ),
-                        style: TextStyle(fontSize: 13, color: scheme.onSurface),
-                        items: [
-                          DropdownMenuItem<String>(
-                            value: null,
-                            child: Text(
-                              'Toutes les classes',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: scheme.onSurface.withOpacity(0.5),
-                              ),
-                            ),
+                        ...classes.map(
+                          (c) => DropdownMenuItem(
+                            value: c['id'],
+                            child: Text(c['nom'] ?? ''),
                           ),
-                          ...classes.map(
-                            (c) => DropdownMenuItem(
-                              value: c['id'],
-                              child: Text(c['nom'] ?? ''),
-                            ),
-                          ),
-                        ],
-                        onChanged: (val) {
-                          final nom = val == null
-                              ? null
-                              : classes.firstWhere(
-                                  (c) => c['id'] == val,
-                                )['nom'];
-                          _onClasseChanged(val, nom);
-                        },
-                      ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        final nom = val == null
+                            ? null
+                            : classes.firstWhere((c) => c['id'] == val)['nom'];
+                        _onClasseChanged(val, nom);
+                      },
                     ),
                   );
                 },
               ),
 
-            // ── Filtre élève (si classe choisie) ─────────────────────────────
+            // Filtre élève
             if (_filtreIdClasse != null && _elevesClasse.isNotEmpty) ...[
               const SizedBox(height: 8),
-              DropdownButtonHideUnderline(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: scheme.onSurface.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: _filtreIdEleve != null
-                          ? scheme.primary.withOpacity(0.5)
-                          : scheme.outlineVariant.withOpacity(0.4),
+              _dropdownBox(
+                scheme: scheme,
+                actif: _filtreIdEleve != null,
+                child: DropdownButton<String>(
+                  value: _elevesClasse.any((e) => e['id'] == _filtreIdEleve)
+                      ? _filtreIdEleve
+                      : null,
+                  isExpanded: true,
+                  hint: Text(
+                    'Sélectionner un élève',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: scheme.onSurface.withOpacity(0.5),
                     ),
                   ),
-                  child: DropdownButton<String>(
-                    value: _elevesClasse.any((e) => e['id'] == _filtreIdEleve)
-                        ? _filtreIdEleve
-                        : null,
-                    isExpanded: true,
-                    hint: Text(
-                      'Tous les élèves',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: scheme.onSurface.withOpacity(0.5),
+                  style: TextStyle(fontSize: 13, color: scheme.onSurface),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: null,
+                      child: Text(
+                        'Tous les élèves',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: scheme.onSurface.withOpacity(0.5),
+                        ),
                       ),
                     ),
-                    style: TextStyle(fontSize: 13, color: scheme.onSurface),
-                    items: [
-                      DropdownMenuItem<String>(
-                        value: null,
-                        child: Text(
-                          'Tous les élèves',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: scheme.onSurface.withOpacity(0.5),
-                          ),
-                        ),
+                    ..._elevesClasse.map(
+                      (e) => DropdownMenuItem(
+                        value: e['id'],
+                        child: Text(e['nom'] ?? ''),
                       ),
-                      ..._elevesClasse.map(
-                        (e) => DropdownMenuItem(
-                          value: e['id'],
-                          child: Text(e['nom'] ?? ''),
-                        ),
-                      ),
-                    ],
-                    onChanged: (val) => setState(() {
-                      _filtreIdEleve = val;
-                      _filtreNomEleve = val == null
-                          ? null
-                          : _elevesClasse.firstWhere(
-                              (e) => e['id'] == val,
-                            )['nom'];
-                    }),
-                  ),
+                    ),
+                  ],
+                  onChanged: (val) => setState(() {
+                    _filtreIdEleve = val;
+                    _filtreNomEleve = val == null
+                        ? null
+                        : _elevesClasse.firstWhere(
+                            (e) => e['id'] == val,
+                          )['nom'];
+                  }),
                 ),
               ),
             ],
@@ -398,18 +365,28 @@ class _PageBulletinState extends State<PageBulletin> {
     );
   }
 
-  // ── Contenu principal ─────────────────────────────────────────────────────
-  Widget _buildContenu(ColorScheme scheme) {
-    // Élève → bulletin personnel
-    if (_role == 'eleve' && _filtreIdEleve != null) {
-      return _BulletinEleve(
-        idEleve: _filtreIdEleve!,
-        nomEleve: _filtreNomEleve ?? '',
-        semestre: _semestre,
-      );
-    }
+  Widget _dropdownBox({
+    required ColorScheme scheme,
+    required bool actif,
+    required Widget child,
+  }) => DropdownButtonHideUnderline(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: scheme.onSurface.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: actif
+              ? scheme.primary.withOpacity(0.5)
+              : scheme.outlineVariant.withOpacity(0.4),
+        ),
+      ),
+      child: child,
+    ),
+  );
 
-    // Admin/Enseignant avec élève sélectionné → bulletin de cet élève
+  // ── Contenu ────────────────────────────────────────────────────────────────
+  Widget _buildContenu(ColorScheme scheme) {
     if (_filtreIdEleve != null) {
       return _BulletinEleve(
         idEleve: _filtreIdEleve!,
@@ -417,8 +394,6 @@ class _PageBulletinState extends State<PageBulletin> {
         semestre: _semestre,
       );
     }
-
-    // Admin/Enseignant avec classe sélectionnée → liste des élèves
     if (_filtreIdClasse != null && _elevesClasse.isNotEmpty) {
       return ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
@@ -435,8 +410,6 @@ class _PageBulletinState extends State<PageBulletin> {
         },
       );
     }
-
-    // Aucun filtre sélectionné
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -452,7 +425,7 @@ class _PageBulletinState extends State<PageBulletin> {
             Text(
               _role == 'eleve'
                   ? 'Chargement...'
-                  : 'Sélectionnez une classe pour voir les bulletins',
+                  : 'Sélectionnez une classe pour afficher les bulletins',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.5),
@@ -467,7 +440,7 @@ class _PageBulletinState extends State<PageBulletin> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// BULLETIN D'UN ÉLÈVE
+// BULLETIN D'UN ÉLÈVE — fidèle au bulletin physique
 // ════════════════════════════════════════════════════════════════════════════
 class _BulletinEleve extends StatelessWidget {
   final String idEleve, nomEleve, semestre;
@@ -478,8 +451,6 @@ class _BulletinEleve extends StatelessWidget {
   });
 
   static const _kBleu = Color(0xFF1A3A8F);
-  static const _kVert = Color(0xFF2A8A5C);
-  static const _kViolet = Color(0xFF7B3FA0);
 
   @override
   Widget build(BuildContext context) {
@@ -497,9 +468,11 @@ class _BulletinEleve extends StatelessWidget {
             child: CircularProgressIndicator(color: scheme.primary),
           );
 
-        final notes = (snap.data?.docs ?? [])
-            .map((d) => NoteModel.fromFirestore(d))
-            .toList();
+        final notes =
+            (snap.data?.docs ?? [])
+                .map((d) => NoteModel.fromFirestore(d))
+                .toList()
+              ..sort((a, b) => a.matiere.compareTo(b.matiere));
 
         if (notes.isEmpty) {
           return Center(
@@ -528,305 +501,44 @@ class _BulletinEleve extends StatelessWidget {
           );
         }
 
-        // Calculer moyenne générale (pondérée par les moyennes matières)
-        final moysMatieres = notes
-            .map((n) => n.moyenneMatiere)
-            .whereType<double>()
-            .toList();
-        final moyGeneral = moysMatieres.isEmpty
-            ? null
-            : moysMatieres.reduce((a, b) => a + b) / moysMatieres.length;
+        // ── Calcul moyenne générale ────────────────────────────────────────
+        double sommeCoeff = 0;
+        double sommePonderee = 0;
+        for (final n in notes) {
+          final mp = n.moyennePonderee;
+          if (mp != null) {
+            sommeCoeff += n.coefficient;
+            sommePonderee += mp;
+          }
+        }
+        final moyGeneral = sommeCoeff > 0 ? sommePonderee / sommeCoeff : null;
+        final totalCoeff = notes.fold<double>(0, (s, n) => s + n.coefficient);
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header bulletin ───────────────────────────────────────────────
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: _kBleu,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            nomEleve,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            semestre == 'S1' ? 'Semestre 1' : 'Semestre 2',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (moyGeneral != null)
-                      Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              children: [
-                                Text(
-                                  NoteModel.fmt(moyGeneral),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const Text(
-                                  '/20',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _mention(moyGeneral),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
+              // ── Header ──────────────────────────────────────────────────
+              _buildHeader(scheme),
+              const SizedBox(height: 12),
+
+              // ── Tableau ──────────────────────────────────────────────────
+              _buildTableau(
+                scheme,
+                notes,
+                totalCoeff,
+                sommePonderee,
+                moyGeneral,
               ),
               const SizedBox(height: 16),
 
-              // ── Tableau des matières ──────────────────────────────────────────
-              Container(
-                decoration: BoxDecoration(
-                  color: scheme.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withOpacity(0.4),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: scheme.shadow.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    // En-tête tableau
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _kBleu.withOpacity(0.07),
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(14),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            flex: 3,
-                            child: Text(
-                              'Matière',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          _enteteCol('D1'),
-                          _enteteCol('D2'),
-                          _enteteCol('D3'),
-                          _enteteCol('C1'),
-                          _enteteCol('C2'),
-                          _enteteCol('Moy.', bold: true),
-                        ],
-                      ),
-                    ),
-                    Divider(
-                      height: 1,
-                      color: scheme.outlineVariant.withOpacity(0.4),
-                    ),
+              // ── Appréciations ────────────────────────────────────────────
+              if (moyGeneral != null) _buildAppreciations(scheme, moyGeneral),
+              const SizedBox(height: 16),
 
-                    ...notes.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final note = entry.value;
-                      final moy = note.moyenneMatiere;
-                      final col = note.mentionColor;
-
-                      return Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 3,
-                                  child: Text(
-                                    note.matiere,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                _cellNote(
-                                  note.devoir1,
-                                  const Color(0xFF1A6A9A),
-                                ),
-                                _cellNote(
-                                  note.devoir2,
-                                  const Color(0xFF1A6A9A),
-                                ),
-                                _cellNote(
-                                  note.devoir3,
-                                  const Color(0xFF1A6A9A),
-                                ),
-                                _cellNote(note.compo1, _kViolet),
-                                _cellNote(note.compo2, _kViolet),
-                                // Moyenne matière
-                                SizedBox(
-                                  width: 44,
-                                  child: Center(
-                                    child: moy == null
-                                        ? Text(
-                                            '—',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: scheme.onSurface
-                                                  .withOpacity(0.4),
-                                            ),
-                                          )
-                                        : Text(
-                                            NoteModel.fmt(moy),
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: col,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (i < notes.length - 1)
-                            Divider(
-                              height: 1,
-                              indent: 16,
-                              endIndent: 16,
-                              color: scheme.outlineVariant.withOpacity(0.3),
-                            ),
-                        ],
-                      );
-                    }),
-
-                    // ── Ligne total ───────────────────────────────────────────────
-                    Divider(
-                      height: 1,
-                      color: scheme.outlineVariant.withOpacity(0.5),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            flex: 3,
-                            child: Text(
-                              'Moyenne générale',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 44),
-                          SizedBox(width: 44),
-                          SizedBox(width: 44),
-                          SizedBox(width: 44),
-                          SizedBox(width: 44),
-                          SizedBox(
-                            width: 44,
-                            child: Center(
-                              child: moyGeneral == null
-                                  ? Text(
-                                      '—',
-                                      style: TextStyle(
-                                        color: scheme.onSurface.withOpacity(
-                                          0.4,
-                                        ),
-                                      ),
-                                    )
-                                  : Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _couleurMoyenne(
-                                          moyGeneral,
-                                        ).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        NoteModel.fmt(moyGeneral),
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: _couleurMoyenne(moyGeneral),
-                                        ),
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // ── Légende ───────────────────────────────────────────────────────
-              _Legende(),
+              // ── Légende ──────────────────────────────────────────────────
+              _buildLegende(scheme),
               const SizedBox(height: 32),
             ],
           ),
@@ -835,139 +547,470 @@ class _BulletinEleve extends StatelessWidget {
     );
   }
 
-  Widget _enteteCol(String txt, {bool bold = false}) => SizedBox(
-    width: 44,
-    child: Center(
-      child: Text(
-        txt,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: bold ? FontWeight.bold : FontWeight.w500,
-          color: const Color(0xFF1A3A8F),
-        ),
-      ),
+  // ── Header ─────────────────────────────────────────────────────────────────
+  Widget _buildHeader(ColorScheme scheme) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _kBleu,
+      borderRadius: BorderRadius.circular(14),
     ),
-  );
-
-  Widget _cellNote(double? val, Color color) => SizedBox(
-    width: 44,
-    child: Center(
-      child: val == null
-          ? Text('—', style: const TextStyle(fontSize: 11, color: Colors.grey))
-          : Text(
-              NoteModel.fmt(val),
-              style: TextStyle(
-                fontSize: 12,
-                color: color,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-    ),
-  );
-
-  Color _couleurMoyenne(double moy) {
-    if (moy >= 16) return const Color(0xFF2A8A5C);
-    if (moy >= 12) return const Color(0xFF1A3A8F);
-    if (moy >= 8) return const Color(0xFFC0692A);
-    return const Color(0xFFD32F2F);
-  }
-
-  String _mention(double m) {
-    if (m >= 16) return 'Très Bien';
-    if (m >= 14) return 'Bien';
-    if (m >= 12) return 'Assez Bien';
-    if (m >= 10) return 'Passable';
-    return 'Insuffisant';
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// LÉGENDE COEFFICIENTS
-// ════════════════════════════════════════════════════════════════════════════
-class _Legende extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.onSurface.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Coefficients',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              color: scheme.onSurface.withOpacity(0.7),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _LegItem(
-                'D1, D2, D3',
-                'Devoirs',
-                const Color(0xFF1A6A9A),
-                'Coeff. 1',
+              Text(
+                nomEleve,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const SizedBox(width: 16),
-              _LegItem(
-                'C1, C2',
-                'Compositions',
-                const Color(0xFF7B3FA0),
-                'Coeff. 2',
+              const SizedBox(height: 4),
+              Text(
+                semestre == 'S1' ? '1er Semestre' : '2ème Semestre',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Formule : Moy. matière = (Moy.Devoirs × 1 + Moy.Compos × 2) / 3',
-            style: TextStyle(
-              fontSize: 11,
-              color: scheme.onSurface.withOpacity(0.5),
-              fontStyle: FontStyle.italic,
+        ),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.school_rounded,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  // ── Tableau ─────────────────────────────────────────────────────────────────
+  Widget _buildTableau(
+    ColorScheme scheme,
+    List<NoteModel> notes,
+    double totalCoeff,
+    double totalPondere,
+    double? moyGeneral,
+  ) {
+    const wMat = 110.0;
+    const wNum = 48.0;
+    const wApprec = 108.0;
+
+    const headerStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      fontSize: 11,
+      color: Colors.white,
+    );
+
+    Color rowColor(int i) =>
+        i.isEven ? scheme.surface : scheme.onSurface.withOpacity(0.03);
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.hardEdge,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── En-tête ──────────────────────────────────────────────────
+            Container(
+              color: _kBleu,
+              child: Row(
+                children: [
+                  _hCell('DISCIPLINES', wMat, headerStyle, left: true),
+                  _hCell('Devoir', wNum, headerStyle),
+                  _hCell('Comp', wNum, headerStyle),
+                  _hCell('Moy/20', wNum, headerStyle),
+                  _hCell('Coef', wNum, headerStyle),
+                  _hCell('Moy×C', wNum, headerStyle),
+                  _hCell('Appréciations', wApprec, headerStyle),
+                ],
+              ),
             ),
+
+            // ── Lignes matières ──────────────────────────────────────────
+            ...notes.asMap().entries.map((entry) {
+              final i = entry.key;
+              final n = entry.value;
+              final moy = n.moyenneMatiere;
+              final pond = n.moyennePonderee;
+              final col = _couleurNote(moy);
+
+              return Container(
+                color: rowColor(i),
+                child: Row(
+                  children: [
+                    _dCell(
+                      n.matiere,
+                      wMat,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      left: true,
+                    ),
+                    _dCell(
+                      NoteModel.fmt(n.moyenneDevoirs),
+                      wNum,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF1A6A9A),
+                      ),
+                    ),
+                    _dCell(
+                      NoteModel.fmt(n.compo),
+                      wNum,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF7B3FA0),
+                      ),
+                    ),
+                    _dCell(
+                      NoteModel.fmt(moy),
+                      wNum,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: col,
+                      ),
+                    ),
+                    _dCell(
+                      NoteModel.fmt(n.coefficient),
+                      wNum,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFC0692A),
+                      ),
+                    ),
+                    _dCell(
+                      NoteModel.fmt(pond),
+                      wNum,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: col,
+                      ),
+                    ),
+                    _dCell(
+                      n.appreciation,
+                      wApprec,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: col,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            // ── Séparateur ───────────────────────────────────────────────
+            Divider(height: 1, color: _kBleu.withOpacity(0.3)),
+
+            // ── Ligne TOTAL ──────────────────────────────────────────────
+            Container(
+              color: _kBleu.withOpacity(0.06),
+              child: Row(
+                children: [
+                  _dCell(
+                    'TOTAL',
+                    wMat,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                    left: true,
+                  ),
+                  _dCell('', wNum),
+                  _dCell('', wNum),
+                  _dCell('', wNum),
+                  _dCell(
+                    NoteModel.fmt(totalCoeff),
+                    wNum,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Color(0xFFC0692A),
+                    ),
+                  ),
+                  _dCell(
+                    NoteModel.fmt(totalPondere),
+                    wNum,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                  _dCell('', wApprec),
+                ],
+              ),
+            ),
+
+            // ── Ligne MOYENNE GÉNÉRALE ───────────────────────────────────
+            Container(
+              color: _kBleu.withOpacity(0.11),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: wMat,
+                    child: const Text(
+                      'Moyenne',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _couleurNote(moyGeneral).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _couleurNote(moyGeneral).withOpacity(0.4),
+                      ),
+                    ),
+                    child: Text(
+                      moyGeneral != null
+                          ? '${NoteModel.fmt(moyGeneral)} / 20'
+                          : '— / 20',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: _couleurNote(moyGeneral),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (moyGeneral != null)
+                    Text(
+                      _appreciation(moyGeneral),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: _couleurNote(moyGeneral),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Appréciations (cases à cocher comme sur le bulletin physique) ──────────
+  Widget _buildAppreciations(ColorScheme scheme, double moy) {
+    final gauche = [
+      {'label': 'Satisfaisant doit continuer', 'actif': moy >= 12},
+      {'label': 'Peut Mieux Faire', 'actif': moy >= 8 && moy < 12},
+      {'label': 'Insuffisant', 'actif': moy < 8},
+      {'label': 'Risque de Redoubler', 'actif': moy < 8},
+      {'label': "Risque l'exclusion", 'actif': false},
+    ];
+    final droite = [
+      {'label': 'Félicitations', 'actif': moy >= 16},
+      {'label': 'Encouragement', 'actif': moy >= 14 && moy < 16},
+      {'label': "Tableau d'honneur", 'actif': moy >= 12 && moy < 14},
+      {'label': 'Avertissement', 'actif': moy < 8},
+      {'label': 'Blâme', 'actif': false},
+    ];
+
+    Widget _case(Map<String, dynamic> item) => Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: scheme.outlineVariant.withOpacity(0.4)),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              item['label'] as String,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: (item['actif'] as bool)
+                    ? FontWeight.w600
+                    : FontWeight.normal,
+              ),
+            ),
+          ),
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant.withOpacity(0.7)),
+            ),
+            child: (item['actif'] as bool)
+                ? const Center(
+                    child: Text(
+                      'X',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                : null,
           ),
         ],
       ),
     );
-  }
-}
 
-class _LegItem extends StatelessWidget {
-  final String code, label, coeff;
-  final Color color;
-  const _LegItem(this.code, this.label, this.color, this.coeff);
-  @override
-  Widget build(BuildContext context) => Row(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: Column(children: gauche.map(_case).toList()),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: Column(children: droite.map(_case).toList()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Légende ────────────────────────────────────────────────────────────────
+  Widget _buildLegende(ColorScheme scheme) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: scheme.onSurface.withOpacity(0.04),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: scheme.outlineVariant.withOpacity(0.3)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Formules de calcul',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: scheme.onSurface.withOpacity(0.7),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _leg('Devoir = (D1 + D2) / 2', const Color(0xFF1A6A9A)),
+        const SizedBox(height: 4),
+        _leg('Moy/20 = (Devoir + Comp) / 2', const Color(0xFF7B3FA0)),
+        const SizedBox(height: 4),
+        _leg('Moy×C = Moy/20 × Coefficient', const Color(0xFFC0692A)),
+        const SizedBox(height: 4),
+        _leg('Moyenne = Σ(Moy×C) ÷ Σ(Coefficients)', const Color(0xFF1A3A8F)),
+      ],
+    ),
+  );
+
+  Widget _leg(String txt, Color color) => Row(
     children: [
       Container(
-        width: 10,
-        height: 10,
+        width: 8,
+        height: 8,
         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
-      const SizedBox(width: 6),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$code ($label)',
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          txt,
+          style: TextStyle(
+            fontSize: 11,
+            color: color,
+            fontStyle: FontStyle.italic,
           ),
-          Text(coeff, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-        ],
+        ),
       ),
     ],
   );
+
+  // ── Helpers cellules ───────────────────────────────────────────────────────
+  Widget _hCell(String txt, double w, TextStyle style, {bool left = false}) =>
+      Container(
+        width: w,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Text(
+          txt,
+          textAlign: left ? TextAlign.left : TextAlign.center,
+          style: style,
+        ),
+      );
+
+  Widget _dCell(String txt, double w, {TextStyle? style, bool left = false}) =>
+      Container(
+        width: w,
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+        child: Text(
+          txt,
+          textAlign: left ? TextAlign.left : TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          style:
+              style ??
+              TextStyle(fontSize: 12, color: Colors.grey.withOpacity(0.5)),
+        ),
+      );
+
+  Color _couleurNote(double? m) {
+    if (m == null) return Colors.grey;
+    if (m >= 16) return const Color(0xFF2A8A5C);
+    if (m >= 12) return const Color(0xFF1A3A8F);
+    if (m >= 8) return const Color(0xFFC0692A);
+    return const Color(0xFFD32F2F);
+  }
+
+  String _appreciation(double m) {
+    if (m >= 18) return 'Excellent travail';
+    if (m >= 16) return 'Très Bon Travail';
+    if (m >= 14) return 'Bon Travail';
+    if (m >= 12) return 'A. Bien';
+    if (m >= 10) return 'Passable';
+    if (m >= 8) return 'Insuffisant';
+    return 'Très Insuffisant';
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -977,6 +1020,7 @@ class _EleveListItem extends StatelessWidget {
   final String nom;
   final VoidCallback onTap;
   const _EleveListItem({required this.nom, required this.onTap});
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1005,9 +1049,9 @@ class _EleveListItem extends StatelessWidget {
           nom,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-        trailing: Icon(
+        trailing: const Icon(
           Icons.description_rounded,
-          color: scheme.primary,
+          color: Color(0xFF1A3A8F),
           size: 20,
         ),
       ),
@@ -1311,10 +1355,8 @@ class _DLabel extends StatelessWidget {
   );
 }
 
-// ────────────────────────────────────────────────────────────────────────────
 class _ChipFiltre extends StatelessWidget {
-  final String label;
-  final String val;
+  final String label, val;
   final bool selected;
   final VoidCallback onTap;
   final Color color;

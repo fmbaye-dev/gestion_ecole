@@ -10,9 +10,8 @@ class NoteDto {
   final String semestre;
   final double? devoir1;
   final double? devoir2;
-  final double? devoir3;
-  final double? compo1;
-  final double? compo2;
+  final double? compo;
+  final double coefficient;
 
   NoteDto({
     required this.idEleve,
@@ -22,36 +21,33 @@ class NoteDto {
     this.semestre = 'S1',
     this.devoir1,
     this.devoir2,
-    this.devoir3,
-    this.compo1,
-    this.compo2,
+    this.compo,
+    this.coefficient = 1.0,
   });
 
   factory NoteDto.fromModel(NoteModel m) => NoteDto(
-    idEleve: m.idEleve,
-    nomEleve: m.nomEleve,
-    matiere: m.matiere,
-    idEnseignant: m.idEnseignant,
-    semestre: m.semestre,
-    devoir1: m.devoir1,
-    devoir2: m.devoir2,
-    devoir3: m.devoir3,
-    compo1: m.compo1,
-    compo2: m.compo2,
-  );
+        idEleve: m.idEleve,
+        nomEleve: m.nomEleve,
+        matiere: m.matiere,
+        idEnseignant: m.idEnseignant,
+        semestre: m.semestre,
+        devoir1: m.devoir1,
+        devoir2: m.devoir2,
+        compo: m.compo,
+        coefficient: m.coefficient,
+      );
 
   NoteModel toModel() => NoteModel(
-    idEleve: idEleve,
-    nomEleve: nomEleve,
-    matiere: matiere,
-    idEnseignant: idEnseignant,
-    semestre: semestre,
-    devoir1: devoir1,
-    devoir2: devoir2,
-    devoir3: devoir3,
-    compo1: compo1,
-    compo2: compo2,
-  );
+        idEleve: idEleve,
+        nomEleve: nomEleve,
+        matiere: matiere,
+        idEnseignant: idEnseignant,
+        semestre: semestre,
+        devoir1: devoir1,
+        devoir2: devoir2,
+        compo: compo,
+        coefficient: coefficient,
+      );
 
   Map<String, dynamic> toMap() => toModel().toMap();
 }
