@@ -1,23 +1,16 @@
 // lib/views/page_bulletin.dart
-//
-// Bulletin conforme au modèle physique :
-//   Colonnes : Discipline | Devoir | Comp | Moy/20 | Coef | Moy×Coef | Appréciations
-//
-// Formules :
-//   Moy.Devoirs     = (D1 + D2) / 2
-//   Moy.Matière/20  = (Moy.Devoirs + Compo) / 2
-//   Moy.Pondérée    = Moy.Matière × Coeff
-//   Moy.Générale    = Σ(Moy.Pondérée) / Σ(Coeff)
+// MODIFIÉ :
+//   - Bulletin : affiche absences + retards (depuis collection 'absence')
+//   - Bouton "Notifier" pour publier le bulletin (enqueue notification FCM)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:gestion_ecole/config/routeur.dart';
 import 'package:gestion_ecole/models/note_model.dart';
+import 'package:gestion_ecole/view_model/absence_view_model.dart';
 
-// ════════════════════════════════════════════════════════════════════════════
-// PAGE BULLETIN
-// ════════════════════════════════════════════════════════════════════════════
 class PageBulletin extends StatefulWidget {
   const PageBulletin({super.key});
   @override
@@ -167,7 +160,6 @@ class _PageBulletinState extends State<PageBulletin> {
     );
   }
 
-  // ── Filtres ────────────────────────────────────────────────────────────────
   Widget _buildFiltres(ColorScheme scheme) {
     return Container(
       color: scheme.surface,
@@ -177,28 +169,34 @@ class _PageBulletinState extends State<PageBulletin> {
         children: [
           Row(
             children: [
-              _ChipFiltre('Semestre 1', 'S1', _semestre == 'S1', () {
-                setState(() {
+              _ChipFiltre(
+                'Semestre 1',
+                'S1',
+                _semestre == 'S1',
+                () => setState(() {
                   _semestre = 'S1';
                   if (_role == 'eleve')
                     _filtreIdEleve = FirebaseAuth.instance.currentUser?.uid;
-                });
-              }, const Color(0xFF2A8A5C)),
+                }),
+                const Color(0xFF2A8A5C),
+              ),
               const SizedBox(width: 8),
-              _ChipFiltre('Semestre 2', 'S2', _semestre == 'S2', () {
-                setState(() {
+              _ChipFiltre(
+                'Semestre 2',
+                'S2',
+                _semestre == 'S2',
+                () => setState(() {
                   _semestre = 'S2';
                   if (_role == 'eleve')
                     _filtreIdEleve = FirebaseAuth.instance.currentUser?.uid;
-                });
-              }, const Color(0xFF7B3FA0)),
+                }),
+                const Color(0xFF7B3FA0),
+              ),
             ],
           ),
 
           if (_role != 'eleve') ...[
             const SizedBox(height: 10),
-
-            // Filtre classe enseignant
             if (_role == 'enseignant' && _classesEnseignant.isNotEmpty)
               _dropdownBox(
                 scheme: scheme,
@@ -246,7 +244,6 @@ class _PageBulletinState extends State<PageBulletin> {
                 ),
               ),
 
-            // Filtre classe admin
             if (_role == 'admin')
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -311,7 +308,6 @@ class _PageBulletinState extends State<PageBulletin> {
                 },
               ),
 
-            // Filtre élève
             if (_filtreIdClasse != null && _elevesClasse.isNotEmpty) ...[
               const SizedBox(height: 8),
               _dropdownBox(
@@ -385,13 +381,13 @@ class _PageBulletinState extends State<PageBulletin> {
     ),
   );
 
-  // ── Contenu ────────────────────────────────────────────────────────────────
   Widget _buildContenu(ColorScheme scheme) {
     if (_filtreIdEleve != null) {
       return _BulletinEleve(
         idEleve: _filtreIdEleve!,
         nomEleve: _filtreNomEleve ?? '',
         semestre: _semestre,
+        role: _role ?? 'eleve',
       );
     }
     if (_filtreIdClasse != null && _elevesClasse.isNotEmpty) {
@@ -440,15 +436,81 @@ class _PageBulletinState extends State<PageBulletin> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// BULLETIN D'UN ÉLÈVE — fidèle au bulletin physique
+// BULLETIN D'UN ÉLÈVE — MODIFIÉ : absences + retards + bouton notifier
 // ════════════════════════════════════════════════════════════════════════════
-class _BulletinEleve extends StatelessWidget {
-  final String idEleve, nomEleve, semestre;
+class _BulletinEleve extends StatefulWidget {
+  final String idEleve, nomEleve, semestre, role;
   const _BulletinEleve({
     required this.idEleve,
     required this.nomEleve,
     required this.semestre,
+    required this.role,
   });
+  @override
+  State<_BulletinEleve> createState() => _BulletinEleveState();
+}
+
+class _BulletinEleveState extends State<_BulletinEleve> {
+  int _nbAbsences = 0;
+  int _nbRetards = 0;
+  bool _notifEnvoyee = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _chargerAbsences();
+  }
+
+  @override
+  void didUpdateWidget(_BulletinEleve old) {
+    super.didUpdateWidget(old);
+    if (old.idEleve != widget.idEleve || old.semestre != widget.semestre)
+      _chargerAbsences();
+  }
+
+  Future<void> _chargerAbsences() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('absence')
+        .where('idEleve', isEqualTo: widget.idEleve)
+        .get();
+    int abs = 0, ret = 0;
+    for (final doc in snap.docs) {
+      final type = (doc.data())['type'] as String?;
+      if (type == 'retard')
+        ret++;
+      else
+        abs++;
+    }
+    if (mounted)
+      setState(() {
+        _nbAbsences = abs;
+        _nbRetards = ret;
+      });
+  }
+
+  Future<void> _notifierEleve() async {
+    await FirebaseFirestore.instance.collection('notifications_queue').add({
+      'destinataireId': widget.idEleve,
+      'titre': '📄 Bulletin disponible',
+      'corps':
+          'Votre bulletin du ${widget.semestre == 'S1' ? '1er' : '2ème'} semestre est disponible.',
+      'type': 'bulletin',
+      'data': {'semestre': widget.semestre},
+      'envoye': false,
+      'dateCreation': FieldValue.serverTimestamp(),
+    });
+    if (mounted) {
+      setState(() => _notifEnvoyee = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notification envoyée ✓'),
+          backgroundColor: Color(0xFF2A8A5C),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.all(12),
+        ),
+      );
+    }
+  }
 
   static const _kBleu = Color(0xFF1A3A8F);
 
@@ -459,8 +521,8 @@ class _BulletinEleve extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('note')
-          .where('idEleve', isEqualTo: idEleve)
-          .where('semestre', isEqualTo: semestre)
+          .where('idEleve', isEqualTo: widget.idEleve)
+          .where('semestre', isEqualTo: widget.semestre)
           .snapshots(),
       builder: (_, snap) {
         if (snap.connectionState == ConnectionState.waiting)
@@ -474,7 +536,7 @@ class _BulletinEleve extends StatelessWidget {
                 .toList()
               ..sort((a, b) => a.matiere.compareTo(b.matiere));
 
-        if (notes.isEmpty) {
+        if (notes.isEmpty)
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -488,7 +550,7 @@ class _BulletinEleve extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Aucune note pour $nomEleve\nen $semestre',
+                    'Aucune note pour ${widget.nomEleve}\nen ${widget.semestre}',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: scheme.onSurface.withOpacity(0.5),
@@ -499,11 +561,8 @@ class _BulletinEleve extends StatelessWidget {
               ),
             ),
           );
-        }
 
-        // ── Calcul moyenne générale ────────────────────────────────────────
-        double sommeCoeff = 0;
-        double sommePonderee = 0;
+        double sommeCoeff = 0, sommePonderee = 0;
         for (final n in notes) {
           final mp = n.moyennePonderee;
           if (mp != null) {
@@ -519,11 +578,11 @@ class _BulletinEleve extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ──────────────────────────────────────────────────
+              // ── Header ────────────────────────────────────────────────────
               _buildHeader(scheme),
               const SizedBox(height: 12),
 
-              // ── Tableau ──────────────────────────────────────────────────
+              // ── Tableau ───────────────────────────────────────────────────
               _buildTableau(
                 scheme,
                 notes,
@@ -531,13 +590,49 @@ class _BulletinEleve extends StatelessWidget {
                 sommePonderee,
                 moyGeneral,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-              // ── Appréciations ────────────────────────────────────────────
+              // ── Absences & Retards ────────────────────────────────────────
+              _buildAbsencesRetards(scheme),
+              const SizedBox(height: 12),
+
+              // ── Appréciations ─────────────────────────────────────────────
               if (moyGeneral != null) _buildAppreciations(scheme, moyGeneral),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-              // ── Légende ──────────────────────────────────────────────────
+              // ── Bouton Notifier (admin/enseignant seulement) ───────────────
+              if (widget.role != 'eleve')
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _notifEnvoyee ? null : _notifierEleve,
+                    icon: Icon(
+                      _notifEnvoyee
+                          ? Icons.check_rounded
+                          : Icons.notifications_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _notifEnvoyee
+                          ? 'Notification envoyée ✓'
+                          : 'Notifier l\'élève',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _notifEnvoyee
+                          ? const Color(0xFF2A8A5C)
+                          : _kBleu,
+                      side: BorderSide(
+                        color: _notifEnvoyee ? const Color(0xFF2A8A5C) : _kBleu,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 12),
               _buildLegende(scheme),
               const SizedBox(height: 32),
             ],
@@ -562,7 +657,7 @@ class _BulletinEleve extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                nomEleve,
+                widget.nomEleve,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -571,7 +666,7 @@ class _BulletinEleve extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                semestre == 'S1' ? '1er Semestre' : '2ème Semestre',
+                widget.semestre == 'S1' ? '1er Semestre' : '2ème Semestre',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.8),
                   fontSize: 13,
@@ -596,6 +691,115 @@ class _BulletinEleve extends StatelessWidget {
     ),
   );
 
+  // ── Absences & Retards ─────────────────────────────────────────────────────
+  Widget _buildAbsencesRetards(ColorScheme scheme) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    decoration: BoxDecoration(
+      color: scheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: scheme.outlineVariant.withOpacity(0.5)),
+      boxShadow: [
+        BoxShadow(
+          color: scheme.shadow.withOpacity(0.05),
+          blurRadius: 8,
+          offset: const Offset(0, 3),
+        ),
+      ],
+    ),
+    child: Row(
+      children: [
+        // Absences
+        Expanded(
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.event_busy_rounded,
+                  color: Colors.red,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$_nbAbsences',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                  Text(
+                    'Absences',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 1,
+          height: 40,
+          color: scheme.outlineVariant.withOpacity(0.4),
+        ),
+        // Retards
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFC0692A).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.access_time_rounded,
+                    color: Color(0xFFC0692A),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$_nbRetards',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFC0692A),
+                      ),
+                    ),
+                    Text(
+                      'Retards',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withOpacity(0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
   // ── Tableau ─────────────────────────────────────────────────────────────────
   Widget _buildTableau(
     ColorScheme scheme,
@@ -604,16 +808,12 @@ class _BulletinEleve extends StatelessWidget {
     double totalPondere,
     double? moyGeneral,
   ) {
-    const wMat = 110.0;
-    const wNum = 48.0;
-    const wApprec = 108.0;
-
+    const wMat = 110.0, wNum = 48.0, wApprec = 108.0;
     const headerStyle = TextStyle(
       fontWeight: FontWeight.bold,
       fontSize: 11,
       color: Colors.white,
     );
-
     Color rowColor(int i) =>
         i.isEven ? scheme.surface : scheme.onSurface.withOpacity(0.03);
 
@@ -635,7 +835,6 @@ class _BulletinEleve extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── En-tête ──────────────────────────────────────────────────
             Container(
               color: _kBleu,
               child: Row(
@@ -650,15 +849,12 @@ class _BulletinEleve extends StatelessWidget {
                 ],
               ),
             ),
-
-            // ── Lignes matières ──────────────────────────────────────────
             ...notes.asMap().entries.map((entry) {
               final i = entry.key;
               final n = entry.value;
               final moy = n.moyenneMatiere;
               final pond = n.moyennePonderee;
               final col = _couleurNote(moy);
-
               return Container(
                 color: rowColor(i),
                 child: Row(
@@ -728,11 +924,7 @@ class _BulletinEleve extends StatelessWidget {
                 ),
               );
             }),
-
-            // ── Séparateur ───────────────────────────────────────────────
             Divider(height: 1, color: _kBleu.withOpacity(0.3)),
-
-            // ── Ligne TOTAL ──────────────────────────────────────────────
             Container(
               color: _kBleu.withOpacity(0.06),
               child: Row(
@@ -770,8 +962,6 @@ class _BulletinEleve extends StatelessWidget {
                 ],
               ),
             ),
-
-            // ── Ligne MOYENNE GÉNÉRALE ───────────────────────────────────
             Container(
               color: _kBleu.withOpacity(0.11),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
@@ -829,7 +1019,6 @@ class _BulletinEleve extends StatelessWidget {
     );
   }
 
-  // ── Appréciations (cases à cocher comme sur le bulletin physique) ──────────
   Widget _buildAppreciations(ColorScheme scheme, double moy) {
     final gauche = [
       {'label': 'Satisfaisant doit continuer', 'actif': moy >= 12},
@@ -845,8 +1034,7 @@ class _BulletinEleve extends StatelessWidget {
       {'label': 'Avertissement', 'actif': moy < 8},
       {'label': 'Blâme', 'actif': false},
     ];
-
-    Widget _case(Map<String, dynamic> item) => Container(
+    Widget case_(Map<String, dynamic> item) => Container(
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: scheme.outlineVariant.withOpacity(0.4)),
@@ -887,7 +1075,6 @@ class _BulletinEleve extends StatelessWidget {
         ],
       ),
     );
-
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -898,7 +1085,7 @@ class _BulletinEleve extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             clipBehavior: Clip.hardEdge,
-            child: Column(children: gauche.map(_case).toList()),
+            child: Column(children: gauche.map(case_).toList()),
           ),
         ),
         const SizedBox(width: 12),
@@ -909,14 +1096,13 @@ class _BulletinEleve extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             clipBehavior: Clip.hardEdge,
-            child: Column(children: droite.map(_case).toList()),
+            child: Column(children: droite.map(case_).toList()),
           ),
         ),
       ],
     );
   }
 
-  // ── Légende ────────────────────────────────────────────────────────────────
   Widget _buildLegende(ColorScheme scheme) => Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
@@ -968,7 +1154,6 @@ class _BulletinEleve extends StatelessWidget {
     ],
   );
 
-  // ── Helpers cellules ───────────────────────────────────────────────────────
   Widget _hCell(String txt, double w, TextStyle style, {bool left = false}) =>
       Container(
         width: w,
@@ -1014,12 +1199,18 @@ class _BulletinEleve extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ITEM ÉLÈVE DANS LA LISTE
+// ITEM ÉLÈVE
 // ════════════════════════════════════════════════════════════════════════════
 class _EleveListItem extends StatelessWidget {
   final String nom;
   final VoidCallback onTap;
   const _EleveListItem({required this.nom, required this.onTap});
+  String _initiales(String n) {
+    final p = n.trim().split(' ');
+    if (p.length >= 2 && p[0].isNotEmpty && p[1].isNotEmpty)
+      return '${p[0][0]}${p[1][0]}'.toUpperCase();
+    return n.isNotEmpty ? n[0].toUpperCase() : '?';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1057,23 +1248,15 @@ class _EleveListItem extends StatelessWidget {
       ),
     );
   }
-
-  String _initiales(String nom) {
-    final p = nom.trim().split(' ');
-    if (p.length >= 2 && p[0].isNotEmpty && p[1].isNotEmpty)
-      return '${p[0][0]}${p[1][0]}'.toUpperCase();
-    return nom.isNotEmpty ? nom[0].toUpperCase() : '?';
-  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DRAWER
+// DRAWER & HELPERS
 // ════════════════════════════════════════════════════════════════════════════
 class _DrawerRole extends StatelessWidget {
   final String role;
   final VoidCallback onDeconnexion;
   const _DrawerRole({required this.role, required this.onDeconnexion});
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1081,7 +1264,6 @@ class _DrawerRole extends StatelessWidget {
     IconData icone;
     String titre;
     List<Widget> items;
-
     switch (role) {
       case 'admin':
         icone = Icons.admin_panel_settings_rounded;
@@ -1192,7 +1374,6 @@ class _DrawerRole extends StatelessWidget {
           ),
         ];
     }
-
     return Drawer(
       backgroundColor: scheme.surface,
       child: Column(

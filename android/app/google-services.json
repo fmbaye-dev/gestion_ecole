@@ -12,7 +12,20 @@
           "package_name": "com.example.gestion_ecole"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1038055476346-cuq85pvtjcpil3ifi4095bcdp5jtj1dn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.gestion_ecole",
+            "certificate_hash": "68703ec98bec10b63fd7ff36f42885539db29dc4"
+          }
+        },
+        {
+          "client_id": "1038055476346-2j1jaruhn64nlmos82ep1g1vobgraort.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDcMJPDM_9lC7sSLYSICDv5Y1DHnRN1Nzs"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1038055476346-2j1jaruhn64nlmos82ep1g1vobgraort.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1038055476346-b7smqemnsv34v193td3mernhe7geqk04.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.gestionEcole"
+              }
+            }
+          ]
         }
       }
     }

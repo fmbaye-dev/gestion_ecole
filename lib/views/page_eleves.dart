@@ -1,6 +1,10 @@
 ﻿// lib/views/page_eleves.dart
-//   contact et résumé des notes/absences.
-//   Tap sur _EleveCard ouvre maintenant la fiche détail.
+// MODIFIÉ :
+//   - EleveModel : tuteur (nomTuteur, contactTuteur, emailTuteur)
+//                  santé (maladies, handicaps, observationsMedicales)
+//   - PageDetailEleve : sections Tuteur + Santé
+//   - FormulaireEleve : champs Tuteur + Santé
+//   - _ResumeEleveCard : compteur Retards séparé des Absences
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -43,6 +47,7 @@ class _PageElevesState extends State<PageEleves> {
       drawer: const _DrawerAdmin(),
       body: Column(
         children: [
+          // ── Barre recherche + filtre classe ─────────────────────────────────
           Container(
             color: scheme.surface,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -204,24 +209,27 @@ class _PageElevesState extends State<PageEleves> {
               ],
             ),
           ),
+
+          // ── Liste des élèves ─────────────────────────────────────────────────
           Expanded(
             child: StreamBuilder<List<EleveModel>>(
               stream: _filtreIdClasse != null
                   ? vm.streamParClasse(_filtreIdClasse!)
                   : vm.streamEleves,
               builder: (_, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
+                if (snap.connectionState == ConnectionState.waiting)
                   return Center(
                     child: CircularProgressIndicator(color: scheme.primary),
                   );
-                }
+
                 final list = (snap.data ?? [])
                     .where(
                       (e) =>
                           _q.isEmpty || e.nomComplet.toLowerCase().contains(_q),
                     )
                     .toList();
-                if (list.isEmpty) {
+
+                if (list.isEmpty)
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
@@ -250,7 +258,7 @@ class _PageElevesState extends State<PageEleves> {
                       ),
                     ),
                   );
-                }
+
                 return ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                   itemCount: list.length,
@@ -274,7 +282,7 @@ class _PageElevesState extends State<PageEleves> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CARD ÉLÈVE — FIX overflow : ListTile remplacé par layout custom
+// CARD ÉLÈVE
 // ════════════════════════════════════════════════════════════════════════════
 class _EleveCard extends StatelessWidget {
   final EleveModel eleve;
@@ -301,7 +309,6 @@ class _EleveCard extends StatelessWidget {
           ),
         ],
       ),
-      // ── Layout custom pour éviter le bottom overflow du ListTile ──────
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () => Navigator.push(
@@ -313,7 +320,6 @@ class _EleveCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Avatar
               CircleAvatar(
                 radius: 22,
                 backgroundColor: kColor.withOpacity(0.12),
@@ -327,7 +333,6 @@ class _EleveCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Infos (Expanded pour ne jamais déborder)
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -353,7 +358,6 @@ class _EleveCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // Wrap gère le retour à la ligne automatiquement
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
@@ -367,7 +371,6 @@ class _EleveCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Boutons actions
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -442,12 +445,11 @@ class _EleveCard extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PAGE DÉTAIL ÉLÈVE
+// PAGE DÉTAIL ÉLÈVE — sections Tuteur + Santé
 // ════════════════════════════════════════════════════════════════════════════
 class PageDetailEleve extends StatelessWidget {
   final EleveModel eleve;
   final bool lectureSeule;
-
   const PageDetailEleve({
     super.key,
     required this.eleve,
@@ -484,7 +486,7 @@ class PageDetailEleve extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ── Header ───────────────────────────────────────────────────
+            // ── Header ─────────────────────────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 36, 24, 36),
@@ -573,6 +575,7 @@ class PageDetailEleve extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
+                  // ── Coordonnées ───────────────────────────────────────────────
                   _SectionCard(
                     titre: 'Coordonnées',
                     icone: Icons.contact_phone_rounded,
@@ -590,6 +593,8 @@ class PageDetailEleve extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 14),
+
+                  // ── Scolarité ─────────────────────────────────────────────────
                   _SectionCard(
                     titre: 'Scolarité',
                     icone: Icons.school_rounded,
@@ -603,6 +608,71 @@ class PageDetailEleve extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 14),
+
+                  // ── Tuteur ← NOUVEAU ──────────────────────────────────────────
+                  if (eleve.nomTuteur.isNotEmpty ||
+                      eleve.contactTuteur.isNotEmpty ||
+                      eleve.emailTuteur.isNotEmpty) ...[
+                    _SectionCard(
+                      titre: 'Tuteur / Parent',
+                      icone: Icons.family_restroom_rounded,
+                      items: [
+                        if (eleve.nomTuteur.isNotEmpty)
+                          _InfoItem(
+                            Icons.badge_rounded,
+                            'Nom du tuteur',
+                            eleve.nomTuteur,
+                          ),
+                        if (eleve.contactTuteur.isNotEmpty)
+                          _InfoItem(
+                            Icons.phone_rounded,
+                            'Contact tuteur',
+                            eleve.contactTuteur,
+                          ),
+                        if (eleve.emailTuteur.isNotEmpty)
+                          _InfoItem(
+                            Icons.email_rounded,
+                            'Email tuteur',
+                            eleve.emailTuteur,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
+                  // ── Santé ← NOUVEAU ───────────────────────────────────────────
+                  if (eleve.maladies.isNotEmpty ||
+                      eleve.handicaps.isNotEmpty ||
+                      eleve.observationsMedicales.isNotEmpty) ...[
+                    _SectionCard(
+                      titre: 'État de santé',
+                      icone: Icons.health_and_safety_rounded,
+                      couleur: const Color(0xFF7B3FA0),
+                      items: [
+                        if (eleve.maladies.isNotEmpty)
+                          _InfoItem(
+                            Icons.coronavirus_rounded,
+                            'Maladies',
+                            eleve.maladies,
+                          ),
+                        if (eleve.handicaps.isNotEmpty)
+                          _InfoItem(
+                            Icons.accessible_rounded,
+                            'Handicaps',
+                            eleve.handicaps,
+                          ),
+                        if (eleve.observationsMedicales.isNotEmpty)
+                          _InfoItem(
+                            Icons.note_alt_rounded,
+                            'Observations médicales',
+                            eleve.observationsMedicales,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+
+                  // ── Résumé notes / absences / retards ─────────────────────────
                   _ResumeEleveCard(idEleve: eleve.id!),
                   const SizedBox(height: 32),
                 ],
@@ -615,7 +685,484 @@ class PageDetailEleve extends StatelessWidget {
   }
 }
 
-// ── Carte résumé notes/absences ──────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// FORMULAIRE AJOUT / MODIFICATION — Tuteur + Santé
+// ════════════════════════════════════════════════════════════════════════════
+class FormulaireEleve extends StatefulWidget {
+  final EleveModel? eleve;
+  const FormulaireEleve({super.key, this.eleve});
+  @override
+  State<FormulaireEleve> createState() => _FormulaireEleveState();
+}
+
+class _FormulaireEleveState extends State<FormulaireEleve> {
+  final _formKey = GlobalKey<FormState>();
+
+  // ── Infos personnelles ─────────────────────────────────────────────────────
+  late final TextEditingController _nom;
+  late final TextEditingController _email;
+  late final TextEditingController _motPasse;
+  late final TextEditingController _telephone;
+  late final TextEditingController _adresse;
+  late final TextEditingController _anneeScolaire;
+
+  // ── Tuteur ← NOUVEAU ──────────────────────────────────────────────────────
+  late final TextEditingController _nomTuteur;
+  late final TextEditingController _contactTuteur;
+  late final TextEditingController _emailTuteur;
+
+  // ── Santé ← NOUVEAU ───────────────────────────────────────────────────────
+  late final TextEditingController _maladies;
+  late final TextEditingController _handicaps;
+  late final TextEditingController _observations;
+
+  bool _motPasseVisible = false;
+  String? _idClasse;
+  String? _nomClasse;
+  bool get _estModif => widget.eleve != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.eleve;
+    _nom = TextEditingController(text: e?.nomComplet ?? '');
+    _email = TextEditingController(text: e?.email ?? '');
+    _motPasse = TextEditingController();
+    _telephone = TextEditingController(text: e?.telephone ?? '');
+    _adresse = TextEditingController(text: e?.adresse ?? '');
+    _anneeScolaire = TextEditingController(
+      text: e?.anneeScolaire.isNotEmpty == true
+          ? e!.anneeScolaire
+          : EleveModel.anneeCourante(),
+    );
+    // Tuteur
+    _nomTuteur = TextEditingController(text: e?.nomTuteur ?? '');
+    _contactTuteur = TextEditingController(text: e?.contactTuteur ?? '');
+    _emailTuteur = TextEditingController(text: e?.emailTuteur ?? '');
+    // Santé
+    _maladies = TextEditingController(text: e?.maladies ?? '');
+    _handicaps = TextEditingController(text: e?.handicaps ?? '');
+    _observations = TextEditingController(text: e?.observationsMedicales ?? '');
+
+    _idClasse = e?.idClasse;
+    _nomClasse = e?.nomClasse;
+  }
+
+  @override
+  void dispose() {
+    for (final c in [
+      _nom,
+      _email,
+      _motPasse,
+      _telephone,
+      _adresse,
+      _anneeScolaire,
+      _nomTuteur,
+      _contactTuteur,
+      _emailTuteur,
+      _maladies,
+      _handicaps,
+      _observations,
+    ])
+      c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enregistrer() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_idClasse == null || _idClasse!.isEmpty) {
+      _snack(context, 'Veuillez sélectionner une classe', Colors.orange);
+      return;
+    }
+    final vm = context.read<EleveViewModel>();
+    final model = EleveModel(
+      nomComplet: _nom.text.trim(),
+      email: _email.text.trim(),
+      motPasse: _motPasse.text.trim(),
+      telephone: _telephone.text.trim(),
+      adresse: _adresse.text.trim(),
+      idClasse: _idClasse!,
+      nomClasse: _nomClasse ?? '',
+      anneeScolaire: _anneeScolaire.text.trim(),
+      nomTuteur: _nomTuteur.text.trim(),
+      contactTuteur: _contactTuteur.text.trim(),
+      emailTuteur: _emailTuteur.text.trim(),
+      maladies: _maladies.text.trim(),
+      handicaps: _handicaps.text.trim(),
+      observationsMedicales: _observations.text.trim(),
+    );
+    final ok = _estModif
+        ? await vm.modifier(widget.eleve!.id!, model)
+        : await vm.ajouter(model);
+    if (mounted) {
+      final errMsg = ok ? null : _emailExistantMessage(vm.erreur ?? '');
+      _snack(
+        context,
+        ok
+            ? (_estModif ? 'Élève modifié ✓' : 'Élève ajouté ✓')
+            : errMsg ?? vm.erreur ?? 'Erreur',
+        ok ? Colors.green : Colors.red,
+      );
+      if (ok) Navigator.pop(context);
+    }
+  }
+
+  String _emailExistantMessage(String raw) {
+    if (raw.contains('email-already-in-use') ||
+        raw.contains('email-already-exists') ||
+        raw.contains('Email déjà utilisé'))
+      return 'Cet email est déjà utilisé par un autre compte.';
+    return raw;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final vm = context.watch<EleveViewModel>();
+    final cvm = context.watch<ClasseViewModel>();
+
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        title: Text(_estModif ? 'Modifier l\'élève' : 'Ajouter un élève'),
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+      ),
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ══════════════════════════════════════════════════════════════
+              // INFORMATIONS PERSONNELLES
+              // ══════════════════════════════════════════════════════════════
+              _SectionTitre('Informations personnelles', Icons.person_rounded),
+              const SizedBox(height: 14),
+              _Champ(
+                ctrl: _nom,
+                label: 'Nom complet',
+                icon: Icons.badge_rounded,
+              ),
+              const SizedBox(height: 12),
+              _Champ(
+                ctrl: _email,
+                label: 'Email',
+                icon: Icons.email_rounded,
+                type: TextInputType.emailAddress,
+                validator: (v) =>
+                    (v == null || !v.contains('@')) ? 'Email invalide' : null,
+              ),
+              const SizedBox(height: 12),
+              if (!_estModif) ...[
+                TextFormField(
+                  controller: _motPasse,
+                  obscureText: !_motPasseVisible,
+                  decoration: InputDecoration(
+                    labelText: 'Mot de passe',
+                    prefixIcon: const Icon(Icons.lock_rounded, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _motPasseVisible
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                        size: 20,
+                      ),
+                      onPressed: () =>
+                          setState(() => _motPasseVisible = !_motPasseVisible),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Mot de passe requis';
+                    if (v.length < 6) return 'Minimum 6 caractères';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+              _Champ(
+                ctrl: _telephone,
+                label: 'Téléphone',
+                icon: Icons.phone_rounded,
+                type: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              _Champ(
+                ctrl: _adresse,
+                label: 'Adresse',
+                icon: Icons.location_on_rounded,
+                lines: 2,
+              ),
+              const SizedBox(height: 24),
+
+              // ══════════════════════════════════════════════════════════════
+              // SCOLARITÉ
+              // ══════════════════════════════════════════════════════════════
+              _SectionTitre('Scolarité', Icons.school_rounded),
+              const SizedBox(height: 14),
+              _Champ(
+                ctrl: _anneeScolaire,
+                label: 'Année scolaire (ex: 2024-2025)',
+                icon: Icons.calendar_today_rounded,
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Année scolaire requise';
+                  if (!RegExp(r'^\d{4}-\d{4}$').hasMatch(v))
+                    return 'Format attendu : 2024-2025';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              cvm.classes.isEmpty
+                  ? Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.orange,
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Aucune classe disponible.',
+                              style: TextStyle(color: Colors.orange),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pushNamed(
+                              context,
+                              Routeur.routeClasses,
+                            ),
+                            child: const Text('Créer'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : DropdownButtonFormField<String>(
+                      value: cvm.classes.any((c) => c.id == _idClasse)
+                          ? _idClasse
+                          : null,
+                      decoration: InputDecoration(
+                        labelText: 'Classe',
+                        prefixIcon: const Icon(Icons.class_rounded, size: 20),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                      ),
+                      items: cvm.classes
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c.id,
+                              child: Text(c.nomClasse),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) => setState(() {
+                        _idClasse = val;
+                        _nomClasse = cvm.classes
+                            .firstWhere((c) => c.id == val)
+                            .nomClasse;
+                      }),
+                      validator: (v) => v == null ? 'Classe requise' : null,
+                    ),
+              const SizedBox(height: 28),
+
+              // ══════════════════════════════════════════════════════════════
+              // TUTEUR / PARENT ← NOUVEAU
+              // ══════════════════════════════════════════════════════════════
+              _SectionTitreCouleur(
+                'Tuteur / Parent',
+                Icons.family_restroom_rounded,
+                const Color(0xFF2A8A5C),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A8A5C).withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF2A8A5C).withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 15,
+                      color: const Color(0xFF2A8A5C).withOpacity(0.7),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Ces champs sont optionnels.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: const Color(0xFF2A8A5C).withOpacity(0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _Champ(
+                ctrl: _nomTuteur,
+                label: 'Nom du tuteur',
+                icon: Icons.badge_rounded,
+                validator: (_) => null,
+              ),
+              const SizedBox(height: 12),
+              _Champ(
+                ctrl: _contactTuteur,
+                label: 'Contact du tuteur',
+                icon: Icons.phone_rounded,
+                type: TextInputType.phone,
+                validator: (_) => null,
+              ),
+              const SizedBox(height: 12),
+              _Champ(
+                ctrl: _emailTuteur,
+                label: 'Email du tuteur',
+                icon: Icons.email_rounded,
+                type: TextInputType.emailAddress,
+                validator: (_) => null,
+              ),
+              const SizedBox(height: 28),
+
+              // ══════════════════════════════════════════════════════════════
+              // ÉTAT DE SANTÉ ← NOUVEAU
+              // ══════════════════════════════════════════════════════════════
+              _SectionTitreCouleur(
+                'État de santé',
+                Icons.health_and_safety_rounded,
+                const Color(0xFF7B3FA0),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7B3FA0).withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF7B3FA0).withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.lock_rounded,
+                      size: 14,
+                      color: const Color(0xFF7B3FA0).withOpacity(0.7),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Ces informations sont confidentielles. '
+                        'Accessibles uniquement aux administrateurs.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: const Color(0xFF7B3FA0).withOpacity(0.8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _Champ(
+                ctrl: _maladies,
+                label: 'Maladies',
+                icon: Icons.coronavirus_rounded,
+                lines: 2,
+                validator: (_) => null,
+              ),
+              const SizedBox(height: 12),
+              _Champ(
+                ctrl: _handicaps,
+                label: 'Handicaps',
+                icon: Icons.accessible_rounded,
+                lines: 2,
+                validator: (_) => null,
+              ),
+              const SizedBox(height: 12),
+              _Champ(
+                ctrl: _observations,
+                label: 'Observations médicales',
+                icon: Icons.note_alt_rounded,
+                lines: 3,
+                validator: (_) => null,
+              ),
+              const SizedBox(height: 32),
+
+              // ── Bouton enregistrer ─────────────────────────────────────────
+              SizedBox(
+                height: 52,
+                child: FilledButton(
+                  onPressed: vm.isLoading ? null : _enregistrer,
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: vm.isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          _estModif
+                              ? 'Enregistrer les modifications'
+                              : 'Ajouter l\'élève',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RÉSUMÉ ÉLÈVE — Notes + Absences + Retards
+// ════════════════════════════════════════════════════════════════════════════
 class _ResumeEleveCard extends StatelessWidget {
   final String idEleve;
   const _ResumeEleveCard({required this.idEleve});
@@ -636,7 +1183,7 @@ class _ResumeEleveCard extends StatelessWidget {
             .get(),
       ]),
       builder: (_, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+        if (snap.connectionState == ConnectionState.waiting)
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -651,15 +1198,19 @@ class _ResumeEleveCard extends StatelessWidget {
               ),
             ),
           );
-        }
+
         final nbNotes = snap.data?[0].docs.length ?? 0;
-        final nbAbsences = snap.data?[1].docs.length ?? 0;
-        final absences = snap.data?[1].docs ?? [];
-        final nbNonJustifiees = absences
-            .where(
-              (d) => (d.data() as Map<String, dynamic>)['justifiee'] == false,
-            )
-            .length;
+        final absDocs = snap.data?[1].docs ?? [];
+
+        // Compter absences vs retards
+        int nbAbsences = 0, nbRetards = 0;
+        for (final doc in absDocs) {
+          final type = (doc.data() as Map<String, dynamic>)['type'] as String?;
+          if (type == 'retard')
+            nbRetards++;
+          else
+            nbAbsences++;
+        }
 
         return Container(
           decoration: BoxDecoration(
@@ -738,10 +1289,10 @@ class _ResumeEleveCard extends StatelessWidget {
                     ),
                     Expanded(
                       child: _StatItem(
-                        icon: Icons.warning_amber_rounded,
-                        valeur: '$nbNonJustifiees',
-                        label: 'Non justif.',
-                        color: Colors.orange,
+                        icon: Icons.access_time_rounded,
+                        valeur: '$nbRetards',
+                        label: 'Retards',
+                        color: const Color(0xFFC0692A),
                       ),
                     ),
                   ],
@@ -797,19 +1348,27 @@ class _StatItem extends StatelessWidget {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// SECTION CARD GÉNÉRIQUE
+// ════════════════════════════════════════════════════════════════════════════
 class _SectionCard extends StatelessWidget {
   final String titre;
   final IconData icone;
   final List<_InfoItem> items;
+  final Color? couleur;
+
   const _SectionCard({
     required this.titre,
     required this.icone,
     required this.items,
+    this.couleur,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final c = couleur ?? scheme.primary;
+
     return Container(
       decoration: BoxDecoration(
         color: scheme.surface,
@@ -833,10 +1392,10 @@ class _SectionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: scheme.primary.withOpacity(0.1),
+                    color: c.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icone, size: 15, color: scheme.primary),
+                  child: Icon(icone, size: 15, color: c),
                 ),
                 const SizedBox(width: 10),
                 Text(
@@ -844,7 +1403,7 @@ class _SectionCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: scheme.primary,
+                    color: c,
                   ),
                 ),
               ],
@@ -867,10 +1426,10 @@ class _SectionCard extends StatelessWidget {
                         width: 38,
                         height: 38,
                         decoration: BoxDecoration(
-                          color: scheme.primary.withOpacity(0.07),
+                          color: c.withOpacity(0.07),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(item.icon, size: 18, color: scheme.primary),
+                        child: Icon(item.icon, size: 18, color: c),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -918,305 +1477,6 @@ class _InfoItem {
   final IconData icon;
   final String label, value;
   const _InfoItem(this.icon, this.label, this.value);
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// FORMULAIRE AJOUT / MODIFICATION
-// ════════════════════════════════════════════════════════════════════════════
-class FormulaireEleve extends StatefulWidget {
-  final EleveModel? eleve;
-  const FormulaireEleve({super.key, this.eleve});
-  @override
-  State<FormulaireEleve> createState() => _FormulaireEleveState();
-}
-
-class _FormulaireEleveState extends State<FormulaireEleve> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nom;
-  late final TextEditingController _email;
-  late final TextEditingController _motPasse;
-  late final TextEditingController _telephone;
-  late final TextEditingController _adresse;
-  late final TextEditingController _anneeScolaire;
-  bool _motPasseVisible = false;
-  String? _idClasse;
-  String? _nomClasse;
-  bool get _estModif => widget.eleve != null;
-
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.eleve;
-    _nom = TextEditingController(text: e?.nomComplet ?? '');
-    _email = TextEditingController(text: e?.email ?? '');
-    _motPasse = TextEditingController();
-    _telephone = TextEditingController(text: e?.telephone ?? '');
-    _adresse = TextEditingController(text: e?.adresse ?? '');
-    _anneeScolaire = TextEditingController(
-      text: e?.anneeScolaire.isNotEmpty == true
-          ? e!.anneeScolaire
-          : EleveModel.anneeCourante(),
-    );
-    _idClasse = e?.idClasse;
-    _nomClasse = e?.nomClasse;
-  }
-
-  @override
-  void dispose() {
-    for (final c in [
-      _nom,
-      _email,
-      _motPasse,
-      _telephone,
-      _adresse,
-      _anneeScolaire,
-    ])
-      c.dispose();
-    super.dispose();
-  }
-
-  Future<void> _enregistrer() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_idClasse == null || _idClasse!.isEmpty) {
-      _snack(context, 'Veuillez sélectionner une classe', Colors.orange);
-      return;
-    }
-    final vm = context.read<EleveViewModel>();
-    final model = EleveModel(
-      nomComplet: _nom.text.trim(),
-      email: _email.text.trim(),
-      motPasse: _motPasse.text.trim(),
-      telephone: _telephone.text.trim(),
-      adresse: _adresse.text.trim(),
-      idClasse: _idClasse!,
-      nomClasse: _nomClasse ?? '',
-      anneeScolaire: _anneeScolaire.text.trim(),
-    );
-    final ok = _estModif
-        ? await vm.modifier(widget.eleve!.id!, model)
-        : await vm.ajouter(model);
-    if (mounted) {
-      final errMsg = ok ? null : _emailExistantMessage(vm.erreur ?? '');
-      _snack(
-        context,
-        ok
-            ? (_estModif ? 'Élève modifié ✓' : 'Élève ajouté ✓')
-            : errMsg ?? vm.erreur ?? 'Erreur',
-        ok ? Colors.green : Colors.red,
-      );
-      if (ok) Navigator.pop(context);
-    }
-  }
-
-  String _emailExistantMessage(String raw) {
-    if (raw.contains('email-already-in-use') ||
-        raw.contains('email-already-exists') ||
-        raw.contains('Email déjà utilisé')) {
-      return 'Cet email est déjà utilisé par un autre compte.';
-    }
-    return raw;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final vm = context.watch<EleveViewModel>();
-    final cvm = context.watch<ClasseViewModel>();
-
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      appBar: AppBar(
-        title: Text(_estModif ? 'Modifier l\'élève' : 'Ajouter un élève'),
-        centerTitle: false,
-        elevation: 0,
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
-      ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _SectionTitre('Informations personnelles', Icons.person_rounded),
-              const SizedBox(height: 14),
-              _Champ(
-                ctrl: _nom,
-                label: 'Nom complet',
-                icon: Icons.badge_rounded,
-              ),
-              const SizedBox(height: 12),
-              _Champ(
-                ctrl: _email,
-                label: 'Email',
-                icon: Icons.email_rounded,
-                type: TextInputType.emailAddress,
-                validator: (v) =>
-                    (v == null || !v.contains('@')) ? 'Email invalide' : null,
-              ),
-              const SizedBox(height: 12),
-              if (!_estModif) ...[
-                TextFormField(
-                  controller: _motPasse,
-                  obscureText: !_motPasseVisible,
-                  decoration: InputDecoration(
-                    labelText: 'Mot de passe',
-                    prefixIcon: const Icon(Icons.lock_rounded, size: 20),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _motPasseVisible
-                            ? Icons.visibility_off_rounded
-                            : Icons.visibility_rounded,
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _motPasseVisible = !_motPasseVisible),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Mot de passe requis';
-                    if (v.length < 6) return 'Minimum 6 caractères';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-              ],
-              _Champ(
-                ctrl: _telephone,
-                label: 'Téléphone',
-                icon: Icons.phone_rounded,
-                type: TextInputType.phone,
-              ),
-              const SizedBox(height: 12),
-              _Champ(
-                ctrl: _adresse,
-                label: 'Adresse',
-                icon: Icons.location_on_rounded,
-                lines: 2,
-              ),
-              const SizedBox(height: 24),
-              _SectionTitre('Scolarité', Icons.school_rounded),
-              const SizedBox(height: 14),
-              _Champ(
-                ctrl: _anneeScolaire,
-                label: 'Année scolaire (ex: 2024-2025)',
-                icon: Icons.calendar_today_rounded,
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Année scolaire requise';
-                  final regex = RegExp(r'^\d{4}-\d{4}$');
-                  if (!regex.hasMatch(v)) return 'Format attendu : 2024-2025';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              cvm.classes.isEmpty
-                  ? Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.orange.withOpacity(0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.orange,
-                          ),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Text(
-                              'Aucune classe disponible.',
-                              style: TextStyle(color: Colors.orange),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pushNamed(
-                              context,
-                              Routeur.routeClasses,
-                            ),
-                            child: const Text('Créer'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : DropdownButtonFormField<String>(
-                      value: cvm.classes.any((c) => c.id == _idClasse)
-                          ? _idClasse
-                          : null,
-                      decoration: InputDecoration(
-                        labelText: 'Classe',
-                        prefixIcon: const Icon(Icons.class_rounded, size: 20),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                      ),
-                      items: cvm.classes
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text(c.nomClasse),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) => setState(() {
-                        _idClasse = val;
-                        _nomClasse = cvm.classes
-                            .firstWhere((c) => c.id == val)
-                            .nomClasse;
-                      }),
-                      validator: (v) => v == null ? 'Classe requise' : null,
-                    ),
-              const SizedBox(height: 32),
-              SizedBox(
-                height: 52,
-                child: FilledButton(
-                  onPressed: vm.isLoading ? null : _enregistrer,
-                  style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: vm.isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          _estModif
-                              ? 'Enregistrer les modifications'
-                              : 'Ajouter l\'élève',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1417,13 +1677,14 @@ class _DrawerAdmin extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// HELPERS
+// WIDGETS PARTAGÉS
 // ════════════════════════════════════════════════════════════════════════════
 class _DItem extends StatelessWidget {
   final IconData icon;
   final String label, route;
   final bool isActive;
   const _DItem(this.icon, this.label, this.route, {required this.isActive});
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1527,6 +1788,35 @@ class _SectionTitre extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SectionTitreCouleur extends StatelessWidget {
+  final String titre;
+  final IconData icon;
+  final Color color;
+  const _SectionTitreCouleur(this.titre, this.icon, this.color);
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 16, color: color),
+      ),
+      const SizedBox(width: 10),
+      Text(
+        titre,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+          color: color,
+        ),
+      ),
+    ],
+  );
 }
 
 class _Badge extends StatelessWidget {

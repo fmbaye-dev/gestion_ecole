@@ -1,5 +1,7 @@
 ﻿// lib/view_model/absence_view_model.dart
+// MODIFIÉ : streamFiltrees avec type, compterAbsencesEtRetards pour bulletin
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:gestion_ecole/models/absence_model.dart';
 import 'package:gestion_ecole/repositories/firebase_service.dart';
@@ -12,29 +14,63 @@ class AbsenceViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get erreur => _erreur;
 
-  // Toutes les absences (admin)
   Stream<List<AbsenceModel>> get streamAbsences =>
-      _service.streamAbsences().map((s) {
-        final list = s.docs.map((d) => AbsenceModel.fromFirestore(d)).toList();
-        list.sort((a, b) => b.date.compareTo(a.date));
-        return list;
-      });
+      _service.streamAbsences().map(_parse);
 
-  // Absences d'un élève
   Stream<List<AbsenceModel>> streamEleve(String idEleve) =>
-      _service.streamAbsencesEleve(idEleve).map((s) {
-        final list = s.docs.map((d) => AbsenceModel.fromFirestore(d)).toList();
-        list.sort((a, b) => b.date.compareTo(a.date));
-        return list;
-      });
+      _service.streamAbsencesEleve(idEleve).map(_parse);
 
-  // Absences saisies par un enseignant
   Stream<List<AbsenceModel>> streamEnseignant(String idEnseignant) =>
-      _service.streamAbsencesEnseignant(idEnseignant).map((s) {
-        final list = s.docs.map((d) => AbsenceModel.fromFirestore(d)).toList();
-        list.sort((a, b) => b.date.compareTo(a.date));
-        return list;
-      });
+      _service.streamAbsencesEnseignant(idEnseignant).map(_parse);
+
+  Stream<List<AbsenceModel>> streamFiltrees({
+    String? idEleve,
+    String? type,
+    String? matiere,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+  }) => _service
+      .streamAbsencesFiltrees(
+        idEleve: idEleve,
+        type: type,
+        matiere: matiere,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+      )
+      .map(_parse);
+
+  List<AbsenceModel> _parse(QuerySnapshot s) {
+    final list = s.docs.map((d) => AbsenceModel.fromFirestore(d)).toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
+
+  Future<Map<String, int>> compterAbsencesEtRetards({
+    required String idEleve,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+  }) async {
+    Query q = FirebaseFirestore.instance
+        .collection('absence')
+        .where('idEleve', isEqualTo: idEleve);
+    if (dateDebut != null)
+      q = q.where(
+        'date',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(dateDebut),
+      );
+    if (dateFin != null)
+      q = q.where('date', isLessThanOrEqualTo: Timestamp.fromDate(dateFin));
+    final snap = await q.get();
+    int nbAbsences = 0, nbRetards = 0;
+    for (final doc in snap.docs) {
+      final type = (doc.data() as Map<String, dynamic>)['type'] as String?;
+      if (type == 'retard')
+        nbRetards++;
+      else
+        nbAbsences++;
+    }
+    return {'absences': nbAbsences, 'retards': nbRetards};
+  }
 
   Future<bool> ajouter(AbsenceModel absence) async {
     _setLoading(true);

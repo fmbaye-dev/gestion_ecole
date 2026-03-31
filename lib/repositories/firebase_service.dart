@@ -1,4 +1,5 @@
 ﻿// lib/repositories/firebase_service.dart
+// MODIFIÉ : streamAbsencesFiltrees avec filtre type (absence|retard)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -123,9 +124,8 @@ class FirebaseService {
       final snap = await _enseignements
           .where('idEnseignant', isEqualTo: id)
           .get();
-      for (final doc in snap.docs) {
+      for (final doc in snap.docs)
         await doc.reference.update({'nomEnseignant': data['nomComplet']});
-      }
     }
   }
 
@@ -182,9 +182,8 @@ class FirebaseService {
         .where('role', isEqualTo: 'eleve')
         .where('idClasse', isEqualTo: id)
         .get();
-    for (final doc in eleves.docs) {
+    for (final doc in eleves.docs)
       await doc.reference.update({'idClasse': '', 'nomClasse': ''});
-    }
     await _classes.doc(id).delete();
   }
 
@@ -192,10 +191,8 @@ class FirebaseService {
   // ENSEIGNEMENTS
   // ══════════════════════════════════════════════════════════════════════════
   Stream<QuerySnapshot> streamEnseignements() => _enseignements.snapshots();
-
   Stream<QuerySnapshot> streamEnseignementsParClasse(String idClasse) =>
       _enseignements.where('idClasse', isEqualTo: idClasse).snapshots();
-
   Stream<QuerySnapshot> streamEnseignementsParEnseignant(String idEnseignant) =>
       _enseignements.where('idEnseignant', isEqualTo: idEnseignant).snapshots();
 
@@ -243,13 +240,11 @@ class FirebaseService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // NOTES — avec filtre semestre
+  // NOTES
   // ══════════════════════════════════════════════════════════════════════════
   Stream<QuerySnapshot> streamNotes() => _notes.snapshots();
-
   Stream<QuerySnapshot> streamNotesEleve(String idEleve) =>
       _notes.where('idEleve', isEqualTo: idEleve).snapshots();
-
   Stream<QuerySnapshot> streamNotesEnseignant(String idEnseignant) =>
       _notes.where('idEnseignant', isEqualTo: idEnseignant).snapshots();
 
@@ -282,7 +277,7 @@ class FirebaseService {
   Future<void> supprimerNote(String id) => _notes.doc(id).delete();
 
   // ══════════════════════════════════════════════════════════════════════════
-  // ABSENCES
+  // ABSENCES — MODIFIÉ : filtre type
   // ══════════════════════════════════════════════════════════════════════════
   Stream<QuerySnapshot> streamAbsences() => _absences.snapshots();
 
@@ -291,6 +286,28 @@ class FirebaseService {
 
   Stream<QuerySnapshot> streamAbsencesEnseignant(String idEnseignant) =>
       _absences.where('idEnseignant', isEqualTo: idEnseignant).snapshots();
+
+  /// Stream avec filtres combinés : type + classe (via idEleves) + matière + date
+  Stream<QuerySnapshot> streamAbsencesFiltrees({
+    String? idEleve,
+    String? type, // 'absence' | 'retard' | null = tous
+    String? matiere,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+  }) {
+    Query q = _absences;
+    if (idEleve != null) q = q.where('idEleve', isEqualTo: idEleve);
+    if (type != null) q = q.where('type', isEqualTo: type);
+    if (matiere != null) q = q.where('matiere', isEqualTo: matiere);
+    if (dateDebut != null)
+      q = q.where(
+        'date',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(dateDebut),
+      );
+    if (dateFin != null)
+      q = q.where('date', isLessThanOrEqualTo: Timestamp.fromDate(dateFin));
+    return q.snapshots();
+  }
 
   Future<String> ajouterAbsence(Map<String, dynamic> data) async {
     data['dateCreation'] = FieldValue.serverTimestamp();

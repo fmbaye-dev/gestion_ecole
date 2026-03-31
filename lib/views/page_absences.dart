@@ -1,7 +1,8 @@
 ﻿// lib/views/page_absences.dart
-// Admin      → toutes les absences, filtre classe + matière + justifiée (lecture)
-// Enseignant → ses absences seulement (ses classes ET ses matières), saisir/modifier/supprimer
-// Élève      → ses absences, filtre matière + justifiée (lecture)
+// MODIFIÉ :
+//   - Filtre type (Tous | Absences | Retards)
+//   - Formulaire : champ type, enseignantNom (auto), raison (optionnel)
+//   - Card : affiche le type avec badge coloré
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -24,11 +25,8 @@ class _PageAbsencesState extends State<PageAbsences> {
 
   String? _filtreIdClasse, _filtreNomClasse, _filtreMatiere;
   bool? _filtreJustifiee;
+  String? _filtreType; // null=tous | 'absence' | 'retard'
 
-  // Utilisé pour filtrer les absences par classe :
-  // null  = pas de filtre classe sélectionné
-  // []    = classe sélectionnée mais AUCUN élève → afficher liste vide
-  // [ids] = liste des IDs élèves de cette classe
   List<String>? _idElevesClasse;
 
   @override
@@ -52,17 +50,14 @@ class _PageAbsencesState extends State<PageAbsences> {
       });
   }
 
-  /// Appelé quand l'admin change le filtre classe
   Future<void> _onClasseChanged(String? idClasse, String? nomClasse) async {
     setState(() {
       _filtreIdClasse = idClasse;
       _filtreNomClasse = nomClasse;
       _filtreMatiere = null;
-      _idElevesClasse = null; // reset
+      _idElevesClasse = null;
     });
     if (idClasse == null) return;
-
-    // Charger les IDs des élèves de cette classe
     final snap = await FirebaseFirestore.instance
         .collection('utilisateur')
         .where('role', isEqualTo: 'eleve')
@@ -110,16 +105,16 @@ class _PageAbsencesState extends State<PageAbsences> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    if (!_roleCharge) {
+    if (!_roleCharge)
       return Scaffold(
         backgroundColor: scheme.surface,
         body: Center(child: CircularProgressIndicator(color: scheme.primary)),
       );
-    }
+
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
-        title: const Text('Absences'),
+        title: const Text('Absences & Retards'),
         centerTitle: false,
         elevation: 0,
         backgroundColor: scheme.surface,
@@ -158,18 +153,17 @@ class _PageAbsencesState extends State<PageAbsences> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Ligne 1 : classe + matière + reset ──────────────────────────────
           Row(
             children: [
               if (_role != 'eleve') ...[
                 Expanded(
                   child: _role == 'enseignant'
-                      // Enseignant : filtre sur SES classes uniquement
                       ? _DropdownClasseEnseignant(
                           idEnseignant: _uid!,
                           value: _filtreIdClasse,
                           onChanged: _onClasseChanged,
                         )
-                      // Admin : toutes les classes
                       : _DropdownFiltre(
                           hint: 'Toutes les classes',
                           value: _filtreIdClasse,
@@ -207,8 +201,6 @@ class _PageAbsencesState extends State<PageAbsences> {
                 ),
                 const SizedBox(width: 8),
               ],
-
-              // Filtre matière
               Expanded(
                 child: _role == 'enseignant'
                     ? _DropdownMatiereEnseignant(
@@ -223,11 +215,10 @@ class _PageAbsencesState extends State<PageAbsences> {
                         onChanged: (m) => setState(() => _filtreMatiere = m),
                       ),
               ),
-
-              // Bouton reset
               if (_filtreIdClasse != null ||
                   _filtreMatiere != null ||
-                  _filtreJustifiee != null)
+                  _filtreJustifiee != null ||
+                  _filtreType != null)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: IconButton(
@@ -243,6 +234,7 @@ class _PageAbsencesState extends State<PageAbsences> {
                       _filtreNomClasse = null;
                       _filtreMatiere = null;
                       _filtreJustifiee = null;
+                      _filtreType = null;
                       _idElevesClasse = null;
                     }),
                   ),
@@ -252,7 +244,38 @@ class _PageAbsencesState extends State<PageAbsences> {
 
           const SizedBox(height: 10),
 
-          // Chips justifiée
+          // ── Ligne 2 : filtre TYPE (Tous | Absences | Retards) ───────────────
+          Row(
+            children: [
+              _Chip(
+                'Tous',
+                null,
+                _filtreType == null,
+                () => setState(() => _filtreType = null),
+                const Color(0xFF1A3A8F),
+              ),
+              const SizedBox(width: 8),
+              _Chip(
+                'Absences',
+                'absence',
+                _filtreType == 'absence',
+                () => setState(() => _filtreType = 'absence'),
+                Colors.red,
+              ),
+              const SizedBox(width: 8),
+              _Chip(
+                'Retards',
+                'retard',
+                _filtreType == 'retard',
+                () => setState(() => _filtreType = 'retard'),
+                const Color(0xFFC0692A),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // ── Ligne 3 : filtre JUSTIFIÉE ──────────────────────────────────────
           Row(
             children: [
               _Chip(
@@ -260,7 +283,7 @@ class _PageAbsencesState extends State<PageAbsences> {
                 null,
                 _filtreJustifiee == null,
                 () => setState(() => _filtreJustifiee = null),
-                const Color(0xFF1A3A8F),
+                scheme.primary,
               ),
               const SizedBox(width: 8),
               _Chip(
@@ -317,13 +340,12 @@ class _PageAbsencesState extends State<PageAbsences> {
     final scheme = Theme.of(context).colorScheme;
 
     Stream<List<AbsenceModel>> stream;
-    if (_role == 'eleve') {
+    if (_role == 'eleve')
       stream = vm.streamEleve(_uid!);
-    } else if (_role == 'enseignant') {
+    else if (_role == 'enseignant')
       stream = vm.streamEnseignant(_uid!);
-    } else {
+    else
       stream = vm.streamAbsences;
-    }
 
     return StreamBuilder<List<AbsenceModel>>(
       stream: stream,
@@ -335,37 +357,33 @@ class _PageAbsencesState extends State<PageAbsences> {
 
         var list = snap.data ?? [];
 
-        // ── CORRECTION BUG #1 : filtre justifiée ─────────────────────────
         if (_filtreJustifiee != null)
           list = list.where((a) => a.justifiee == _filtreJustifiee).toList();
-
-        // ── CORRECTION BUG #1 : filtre matière ───────────────────────────
         if (_filtreMatiere != null)
           list = list.where((a) => a.matiere == _filtreMatiere).toList();
+        if (_filtreType != null)
+          list = list
+              .where(
+                (a) => _filtreType == 'retard'
+                    ? a.type == TypePresence.retard
+                    : a.type == TypePresence.absence,
+              )
+              .toList();
 
-        // ── CORRECTION BUG #1 : filtre classe ────────────────────────────
-        // Si une classe est sélectionnée :
-        //   - _idElevesClasse == null  → encore en chargement → attendre
-        //   - _idElevesClasse == []    → aucun élève dans cette classe → liste vide
-        //   - _idElevesClasse != null et non vide → filtrer par IDs
         if (_filtreIdClasse != null) {
-          if (_idElevesClasse == null) {
-            // Encore en chargement — afficher loader
+          if (_idElevesClasse == null)
             return Center(
               child: CircularProgressIndicator(color: scheme.primary),
             );
-          }
-          // CRUCIAL : si la liste est vide, on retourne [] (aucune absence affichée)
-          if (_idElevesClasse!.isEmpty) {
+          if (_idElevesClasse!.isEmpty)
             list = [];
-          } else {
+          else
             list = list
                 .where((a) => _idElevesClasse!.contains(a.idEleve))
                 .toList();
-          }
         }
 
-        if (list.isEmpty) {
+        if (list.isEmpty)
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -379,10 +397,7 @@ class _PageAbsencesState extends State<PageAbsences> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    _filtreIdClasse != null &&
-                            (_idElevesClasse?.isEmpty ?? false)
-                        ? 'Aucun élève dans cette classe'
-                        : 'Aucune absence trouvée',
+                    'Aucun enregistrement trouvé',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: scheme.onSurface.withOpacity(0.5),
@@ -393,7 +408,6 @@ class _PageAbsencesState extends State<PageAbsences> {
               ),
             ),
           );
-        }
 
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
@@ -409,11 +423,875 @@ class _PageAbsencesState extends State<PageAbsences> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CHIP JUSTIFIÉE
+// CARD ABSENCE — affiche type + raison
+// ════════════════════════════════════════════════════════════════════════════
+class _AbsenceCard extends StatelessWidget {
+  final AbsenceModel absence;
+  final bool peutModifier;
+  const _AbsenceCard({required this.absence, required this.peutModifier});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final vm = context.read<AbsenceViewModel>();
+    final col = absence.justifiee ? const Color(0xFF2A8A5C) : Colors.red;
+    final typeCol = absence.type == TypePresence.retard
+        ? const Color(0xFFC0692A)
+        : Colors.red;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border(left: BorderSide(color: typeCol, width: 4)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor: typeCol.withOpacity(0.1),
+          child: Icon(
+            absence.type == TypePresence.retard
+                ? Icons.access_time_rounded
+                : (absence.justifiee
+                      ? Icons.check_circle_rounded
+                      : Icons.cancel_rounded),
+            color: typeCol,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          absence.nomEleve,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                _Badge(absence.typeLabel, typeCol),
+                _Badge(absence.matiere, const Color(0xFF7B3FA0)),
+                _Badge(absence.dateFormatee, const Color(0xFF1A3A8F)),
+                _Badge(absence.justifiee ? 'Justifiée' : 'Non justifiée', col),
+                if (absence.raison.isNotEmpty)
+                  _Badge(absence.raison, scheme.primary),
+              ],
+            ),
+            if (absence.enseignantNom.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Par : ${absence.enseignantNom}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withOpacity(0.45),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        trailing: peutModifier
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Modifier',
+                    icon: Icon(
+                      Icons.edit_rounded,
+                      size: 20,
+                      color: scheme.primary,
+                    ),
+                    onPressed: () {
+                      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FormulaireAbsence(
+                            absence: absence,
+                            idEnseignant: uid,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    tooltip: 'Supprimer',
+                    icon: Icon(
+                      Icons.delete_rounded,
+                      size: 20,
+                      color: scheme.error,
+                    ),
+                    onPressed: () => _confirmerSuppression(context, vm),
+                  ),
+                ],
+              )
+            : null,
+      ),
+    );
+  }
+
+  void _confirmerSuppression(BuildContext context, AbsenceViewModel vm) {
+    final scheme = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Supprimer ?'),
+        content: Text(
+          'Supprimer cet enregistrement pour ${absence.nomEleve} ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await vm.supprimer(absence.id!);
+              if (context.mounted)
+                _snack(
+                  context,
+                  ok ? 'Supprimé' : vm.erreur ?? 'Erreur',
+                  ok ? scheme.error : Colors.orange,
+                );
+            },
+            child: Text('Supprimer', style: TextStyle(color: scheme.onError)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FORMULAIRE ABSENCE — MODIFIÉ : type, enseignantNom, raison
+// ════════════════════════════════════════════════════════════════════════════
+class FormulaireAbsence extends StatefulWidget {
+  final AbsenceModel? absence;
+  final String idEnseignant;
+  const FormulaireAbsence({
+    super.key,
+    this.absence,
+    required this.idEnseignant,
+  });
+  @override
+  State<FormulaireAbsence> createState() => _FormulaireAbsenceState();
+}
+
+class _FormulaireAbsenceState extends State<FormulaireAbsence> {
+  DateTime _date = DateTime.now();
+  bool _justifiee = false;
+  TypePresence _type = TypePresence.absence;
+  String? _idClasseFiltre, _idEtu, _nomEtu, _matiere;
+  String _raisonCtrl = '';
+  String _enseignantNom = '';
+
+  List<Map<String, dynamic>> _eleves = [];
+  List<Map<String, String>> _classesEnseignant = [];
+  List<String> _matieresEnseignant = [];
+
+  bool get _estModif => widget.absence != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_estModif) {
+      final a = widget.absence!;
+      _date = a.date;
+      _justifiee = a.justifiee;
+      _type = a.type;
+      _idEtu = a.idEleve;
+      _nomEtu = a.nomEleve;
+      _matiere = a.matiere;
+      _raisonCtrl = a.raison;
+    }
+    _chargerDonneesEnseignant();
+  }
+
+  Future<void> _chargerDonneesEnseignant() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('enseignement')
+        .where('idEnseignant', isEqualTo: widget.idEnseignant)
+        .get();
+    final Map<String, String> cls = {};
+    final Set<String> mats = {};
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final id = d['idClasse'] as String? ?? '';
+      final nm = d['nomClasse'] as String? ?? '';
+      final mt = d['matiere'] as String? ?? '';
+      if (id.isNotEmpty) cls[id] = nm;
+      if (mt.isNotEmpty) mats.add(mt);
+    }
+    // Charger le nom de l'enseignant
+    final userDoc = await FirebaseFirestore.instance
+        .collection('utilisateur')
+        .doc(widget.idEnseignant)
+        .get();
+    if (mounted)
+      setState(() {
+        _classesEnseignant =
+            cls.entries.map((e) => {'id': e.key, 'nom': e.value}).toList()
+              ..sort((a, b) => a['nom']!.compareTo(b['nom']!));
+        _matieresEnseignant = mats.toList()..sort();
+        _enseignantNom = userDoc.data()?['nomComplet'] as String? ?? '';
+      });
+  }
+
+  Future<void> _chargerMatieresParClasse(String idClasse) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('enseignement')
+        .where('idEnseignant', isEqualTo: widget.idEnseignant)
+        .where('idClasse', isEqualTo: idClasse)
+        .get();
+    final mats = <String>{};
+    for (final doc in snap.docs) {
+      final m = doc.data()['matiere'] as String? ?? '';
+      if (m.isNotEmpty) mats.add(m);
+    }
+    if (mounted)
+      setState(() {
+        _matieresEnseignant = mats.toList()..sort();
+        if (_matiere != null && !_matieresEnseignant.contains(_matiere))
+          _matiere = null;
+      });
+  }
+
+  Future<void> _chargerEleves(String idClasse) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('utilisateur')
+        .where('role', isEqualTo: 'eleve')
+        .where('idClasse', isEqualTo: idClasse)
+        .get();
+    if (mounted)
+      setState(() {
+        _eleves = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+        _idEtu = null;
+        _nomEtu = null;
+      });
+  }
+
+  Future<void> _pickDate() async {
+    final p = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('fr', 'FR'),
+    );
+    if (p != null) setState(() => _date = p);
+  }
+
+  Future<void> _enregistrer() async {
+    if (_idEtu == null) {
+      _snack(context, 'Sélectionnez un élève', Colors.orange);
+      return;
+    }
+    if (_matiere == null) {
+      _snack(context, 'Sélectionnez une matière', Colors.orange);
+      return;
+    }
+
+    final vm = context.read<AbsenceViewModel>();
+    final absence = AbsenceModel(
+      idEleve: _idEtu!,
+      nomEleve: _nomEtu!,
+      matiere: _matiere!,
+      date: _date,
+      justifiee: _justifiee,
+      idEnseignant: widget.idEnseignant,
+      enseignantNom: _enseignantNom,
+      type: _type,
+      raison: _raisonCtrl,
+    );
+    final ok = _estModif
+        ? await vm.modifier(widget.absence!.id!, absence)
+        : await vm.ajouter(absence);
+    if (mounted) {
+      _snack(
+        context,
+        ok ? (_estModif ? 'Modifié ✓' : 'Enregistré ✓') : vm.erreur ?? 'Erreur',
+        ok ? Colors.green : Colors.red,
+      );
+      if (ok) Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final vm = context.watch<AbsenceViewModel>();
+
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        title: Text(_estModif ? 'Modifier' : 'Enregistrer une absence/retard'),
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Type : Absence | Retard ─────────────────────────────────────
+            _SectionTitre('Type d\'enregistrement', Icons.category_rounded),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _TypeBtn(
+                    'Absence',
+                    TypePresence.absence,
+                    _type == TypePresence.absence,
+                    Colors.red,
+                    () => setState(() => _type = TypePresence.absence),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _TypeBtn(
+                    'Retard',
+                    TypePresence.retard,
+                    _type == TypePresence.retard,
+                    const Color(0xFFC0692A),
+                    () => setState(() => _type = TypePresence.retard),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (!_estModif) ...[
+              // ── Classe ───────────────────────────────────────────────────
+              _SectionTitre('Classe', Icons.class_rounded),
+              const SizedBox(height: 12),
+              _classesEnseignant.isEmpty
+                  ? _InfoBox(
+                      'Aucune classe assignée',
+                      Icons.warning_amber_rounded,
+                      scheme,
+                      color: Colors.orange,
+                    )
+                  : DropdownButtonFormField<String>(
+                      value:
+                          _classesEnseignant.any(
+                            (c) => c['id'] == _idClasseFiltre,
+                          )
+                          ? _idClasseFiltre
+                          : null,
+                      decoration: _deco('Classe', Icons.class_rounded, scheme),
+                      items: _classesEnseignant
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c['id'],
+                              child: Text(c['nom'] ?? ''),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _idClasseFiltre = val;
+                          _eleves = [];
+                          _idEtu = null;
+                        });
+                        if (val != null) {
+                          _chargerEleves(val);
+                          _chargerMatieresParClasse(val);
+                        }
+                      },
+                    ),
+              const SizedBox(height: 16),
+
+              // ── Élève ─────────────────────────────────────────────────────
+              _SectionTitre('Élève', Icons.school_rounded),
+              const SizedBox(height: 12),
+              _idClasseFiltre == null
+                  ? _InfoBox(
+                      'Sélectionnez d\'abord une classe',
+                      Icons.info_outline_rounded,
+                      scheme,
+                      muted: true,
+                    )
+                  : _eleves.isEmpty
+                  ? _InfoBox(
+                      'Aucun élève dans cette classe',
+                      Icons.warning_amber_rounded,
+                      scheme,
+                      color: Colors.orange,
+                    )
+                  : DropdownButtonFormField<String>(
+                      value: _eleves.any((e) => e['id'] == _idEtu)
+                          ? _idEtu
+                          : null,
+                      decoration: _deco(
+                        'Sélectionner un élève',
+                        Icons.person_rounded,
+                        scheme,
+                      ),
+                      items: _eleves
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e['id'] as String,
+                              child: Text(e['nomComplet'] as String? ?? ''),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) => setState(() {
+                        _idEtu = val;
+                        _nomEtu =
+                            _eleves.firstWhere(
+                                  (e) => e['id'] == val,
+                                )['nomComplet']
+                                as String?;
+                      }),
+                    ),
+              const SizedBox(height: 16),
+
+              // ── Matière ───────────────────────────────────────────────────
+              _SectionTitre('Matière', Icons.book_rounded),
+              const SizedBox(height: 12),
+              _matieresEnseignant.isEmpty
+                  ? _InfoBox(
+                      _idClasseFiltre == null
+                          ? 'Sélectionnez d\'abord une classe'
+                          : 'Aucune matière',
+                      Icons.info_outline_rounded,
+                      scheme,
+                      muted: true,
+                    )
+                  : DropdownButtonFormField<String>(
+                      value: _matieresEnseignant.contains(_matiere)
+                          ? _matiere
+                          : null,
+                      decoration: _deco(
+                        'Sélectionner une matière',
+                        Icons.book_rounded,
+                        scheme,
+                      ),
+                      items: _matieresEnseignant
+                          .map(
+                            (m) => DropdownMenuItem(value: m, child: Text(m)),
+                          )
+                          .toList(),
+                      onChanged: (val) => setState(() => _matiere = val),
+                    ),
+              const SizedBox(height: 16),
+            ] else ...[
+              _InfoBox(_nomEtu ?? '', Icons.person_rounded, scheme),
+              const SizedBox(height: 10),
+              _InfoBox(_matiere ?? '', Icons.book_rounded, scheme),
+              const SizedBox(height: 16),
+            ],
+
+            // ── Date ─────────────────────────────────────────────────────────
+            _SectionTitre('Date', Icons.calendar_today_rounded),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _pickDate,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: scheme.outlineVariant.withOpacity(0.5),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today_rounded,
+                      size: 20,
+                      color: scheme.primary,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '${_date.day.toString().padLeft(2, '0')}/'
+                      '${_date.month.toString().padLeft(2, '0')}/${_date.year}',
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    const Spacer(),
+                    const Icon(Icons.arrow_drop_down_rounded),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Raison (optionnel) ────────────────────────────────────────────
+            _SectionTitre('Raison (optionnel)', Icons.notes_rounded),
+            const SizedBox(height: 12),
+            TextFormField(
+              initialValue: _raisonCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Maladie, rendez-vous médical...',
+                prefixIcon: const Icon(Icons.notes_rounded, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+              ),
+              onChanged: (v) => _raisonCtrl = v,
+            ),
+            const SizedBox(height: 16),
+
+            // ── Justifiée ─────────────────────────────────────────────────────
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: (_justifiee ? const Color(0xFF2A8A5C) : Colors.red)
+                    .withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: (_justifiee ? const Color(0xFF2A8A5C) : Colors.red)
+                      .withOpacity(0.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _justifiee
+                        ? Icons.check_circle_rounded
+                        : Icons.cancel_rounded,
+                    color: _justifiee ? const Color(0xFF2A8A5C) : Colors.red,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _justifiee ? 'Justifié(e)' : 'Non justifié(e)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: _justifiee
+                            ? const Color(0xFF2A8A5C)
+                            : Colors.red,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: _justifiee,
+                    onChanged: (v) => setState(() => _justifiee = v),
+                    activeColor: const Color(0xFF2A8A5C),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            SizedBox(
+              height: 52,
+              child: FilledButton(
+                onPressed: vm.isLoading ? null : _enregistrer,
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: vm.isLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        _estModif
+                            ? 'Enregistrer les modifications'
+                            : 'Enregistrer',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bouton type (Absence | Retard) ────────────────────────────────────────────
+class _TypeBtn extends StatelessWidget {
+  final String label;
+  final TypePresence val;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  const _TypeBtn(this.label, this.val, this.selected, this.color, this.onTap);
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: selected ? color : color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(selected ? 0 : 0.3)),
+      ),
+      child: Center(
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: selected ? Colors.white : color,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DRAWER
+// ════════════════════════════════════════════════════════════════════════════
+class _DrawerRole extends StatelessWidget {
+  final String role;
+  final VoidCallback onDeconnexion;
+  const _DrawerRole({required this.role, required this.onDeconnexion});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final user = FirebaseAuth.instance.currentUser;
+    IconData icone;
+    String titre;
+    List<Widget> items;
+
+    switch (role) {
+      case 'admin':
+        icone = Icons.admin_panel_settings_rounded;
+        titre = 'Administrateur';
+        items = [
+          _DItem(
+            Icons.dashboard_rounded,
+            'Tableau de bord',
+            Routeur.routeAccueil,
+            false,
+          ),
+          const _DLabel('GESTION'),
+          _DItem(Icons.school_rounded, 'Élèves', Routeur.routeEleves, false),
+          _DItem(
+            Icons.person_rounded,
+            'Enseignants',
+            Routeur.routeEnseignants,
+            false,
+          ),
+          _DItem(Icons.class_rounded, 'Classes', Routeur.routeClasses, false),
+          _DItem(Icons.book_rounded, 'Matières', Routeur.routeMatieres, false),
+          const _DLabel('ACADÉMIQUE'),
+          _DItem(Icons.star_rounded, 'Notes', Routeur.routeNotes, false),
+          _DItem(
+            Icons.event_busy_rounded,
+            'Absences',
+            Routeur.routeAbsences,
+            true,
+          ),
+          _DItem(
+            Icons.description_rounded,
+            'Bulletins',
+            Routeur.routeBulletin,
+            false,
+          ),
+          Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
+          _DItem(
+            Icons.person_outline_rounded,
+            'Mon Profil',
+            Routeur.routeProfil,
+            false,
+          ),
+        ];
+        break;
+      case 'enseignant':
+        icone = Icons.school_rounded;
+        titre = 'Enseignant';
+        items = [
+          _DItem(
+            Icons.dashboard_rounded,
+            'Tableau de bord',
+            Routeur.routeAccueilEnseignant,
+            false,
+          ),
+          const _DLabel('ACADÉMIQUE'),
+          _DItem(Icons.star_rounded, 'Notes', Routeur.routeNotes, false),
+          _DItem(
+            Icons.event_busy_rounded,
+            'Absences',
+            Routeur.routeAbsences,
+            true,
+          ),
+          _DItem(
+            Icons.description_rounded,
+            'Bulletins',
+            Routeur.routeBulletin,
+            false,
+          ),
+          Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
+          _DItem(
+            Icons.person_outline_rounded,
+            'Mon Profil',
+            Routeur.routeProfil,
+            false,
+          ),
+        ];
+        break;
+      default:
+        icone = Icons.person_rounded;
+        titre = 'Élève';
+        items = [
+          _DItem(
+            Icons.dashboard_rounded,
+            'Tableau de bord',
+            Routeur.routeAccueilEleve,
+            false,
+          ),
+          const _DLabel('MES DONNÉES'),
+          _DItem(Icons.star_rounded, 'Mes Notes', Routeur.routeNotes, false),
+          _DItem(
+            Icons.event_busy_rounded,
+            'Mes Absences',
+            Routeur.routeAbsences,
+            true,
+          ),
+          _DItem(
+            Icons.description_rounded,
+            'Mon Bulletin',
+            Routeur.routeBulletin,
+            false,
+          ),
+          Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
+          _DItem(
+            Icons.person_outline_rounded,
+            'Mon Profil',
+            Routeur.routeProfil,
+            false,
+          ),
+        ];
+    }
+
+    return Drawer(
+      backgroundColor: scheme.surface,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
+            color: scheme.primary,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: scheme.onPrimary.withOpacity(0.2),
+                  child: Icon(icone, color: scheme.onPrimary, size: 28),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  titre,
+                  style: TextStyle(
+                    color: scheme.onPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  user?.email ?? '',
+                  style: TextStyle(
+                    color: scheme.onPrimary.withOpacity(0.8),
+                    fontSize: 12,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              children: items,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+            child: Material(
+              color: scheme.error.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  Navigator.pop(context);
+                  onDeconnexion();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout_rounded, color: scheme.error, size: 20),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Déconnexion',
+                        style: TextStyle(
+                          color: scheme.error,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DROPDOWNS & HELPERS (repris de l'original, inchangés)
 // ════════════════════════════════════════════════════════════════════════════
 class _Chip extends StatelessWidget {
   final String label;
-  final bool? val;
+  final dynamic val;
   final bool selected;
   final VoidCallback onTap;
   final Color color;
@@ -441,9 +1319,6 @@ class _Chip extends StatelessWidget {
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// DROPDOWNS
-// ════════════════════════════════════════════════════════════════════════════
 class _DropdownFiltre extends StatelessWidget {
   final String hint;
   final String? value;
@@ -728,755 +1603,6 @@ class _DropdownMatiereEnseignant extends StatelessWidget {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// CARD ABSENCE
-// ════════════════════════════════════════════════════════════════════════════
-class _AbsenceCard extends StatelessWidget {
-  final AbsenceModel absence;
-  final bool peutModifier;
-  const _AbsenceCard({required this.absence, required this.peutModifier});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final vm = context.read<AbsenceViewModel>();
-    final col = absence.justifiee ? const Color(0xFF2A8A5C) : Colors.red;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border(left: BorderSide(color: col, width: 4)),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          radius: 20,
-          backgroundColor: col.withOpacity(0.1),
-          child: Icon(
-            absence.justifiee
-                ? Icons.check_circle_rounded
-                : Icons.cancel_rounded,
-            color: col,
-            size: 20,
-          ),
-        ),
-        title: Text(
-          absence.nomEleve,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                _Badge(absence.matiere, const Color(0xFF7B3FA0)),
-                _Badge(absence.dateFormatee, const Color(0xFF1A3A8F)),
-                _Badge(absence.justifiee ? 'Justifiée' : 'Non justifiée', col),
-              ],
-            ),
-          ],
-        ),
-        trailing: peutModifier
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Modifier',
-                    icon: Icon(
-                      Icons.edit_rounded,
-                      size: 20,
-                      color: scheme.primary,
-                    ),
-                    onPressed: () {
-                      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => FormulaireAbsence(
-                            absence: absence,
-                            idEnseignant: uid,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Supprimer',
-                    icon: Icon(
-                      Icons.delete_rounded,
-                      size: 20,
-                      color: scheme.error,
-                    ),
-                    onPressed: () => _confirmerSuppression(context, vm),
-                  ),
-                ],
-              )
-            : null,
-      ),
-    );
-  }
-
-  void _confirmerSuppression(BuildContext context, AbsenceViewModel vm) {
-    final scheme = Theme.of(context).colorScheme;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Supprimer l\'absence ?'),
-        content: Text(
-          'L\'absence de ${absence.nomEleve} du ${absence.dateFormatee} sera supprimée.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: scheme.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final ok = await vm.supprimer(absence.id!);
-              if (context.mounted)
-                _snack(
-                  context,
-                  ok ? 'Absence supprimée' : vm.erreur ?? 'Erreur',
-                  ok ? scheme.error : Colors.orange,
-                );
-            },
-            child: Text('Supprimer', style: TextStyle(color: scheme.onError)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// FORMULAIRE ABSENCE — classes ET matières filtrées selon l'enseignant
-// ════════════════════════════════════════════════════════════════════════════
-class FormulaireAbsence extends StatefulWidget {
-  final AbsenceModel? absence;
-  final String idEnseignant;
-  const FormulaireAbsence({
-    super.key,
-    this.absence,
-    required this.idEnseignant,
-  });
-  @override
-  State<FormulaireAbsence> createState() => _FormulaireAbsenceState();
-}
-
-class _FormulaireAbsenceState extends State<FormulaireAbsence> {
-  DateTime _date = DateTime.now();
-  bool _justifiee = false;
-  String? _idClasseFiltre, _idEtu, _nomEtu, _matiere;
-  List<Map<String, dynamic>> _eleves = [];
-  List<Map<String, String>> _classesEnseignant = [];
-  List<String> _matieresEnseignant = [];
-
-  bool get _estModif => widget.absence != null;
-
-  @override
-  void initState() {
-    super.initState();
-    if (_estModif) {
-      final a = widget.absence!;
-      _date = a.date;
-      _justifiee = a.justifiee;
-      _idEtu = a.idEleve;
-      _nomEtu = a.nomEleve;
-      _matiere = a.matiere;
-    }
-    _chargerDonneesEnseignant();
-  }
-
-  Future<void> _chargerDonneesEnseignant() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('enseignement')
-        .where('idEnseignant', isEqualTo: widget.idEnseignant)
-        .get();
-    final Map<String, String> cls = {};
-    final Set<String> mats = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final id = d['idClasse'] as String? ?? '';
-      final nm = d['nomClasse'] as String? ?? '';
-      final mt = d['matiere'] as String? ?? '';
-      if (id.isNotEmpty) cls[id] = nm;
-      if (mt.isNotEmpty) mats.add(mt);
-    }
-    if (mounted)
-      setState(() {
-        _classesEnseignant =
-            cls.entries.map((e) => {'id': e.key, 'nom': e.value}).toList()
-              ..sort((a, b) => a['nom']!.compareTo(b['nom']!));
-        _matieresEnseignant = mats.toList()..sort();
-      });
-  }
-
-  Future<void> _chargerMatieresParClasse(String idClasse) async {
-    final snap = await FirebaseFirestore.instance
-        .collection('enseignement')
-        .where('idEnseignant', isEqualTo: widget.idEnseignant)
-        .where('idClasse', isEqualTo: idClasse)
-        .get();
-    final mats = <String>{};
-    for (final doc in snap.docs) {
-      final m = doc.data()['matiere'] as String? ?? '';
-      if (m.isNotEmpty) mats.add(m);
-    }
-    if (mounted)
-      setState(() {
-        _matieresEnseignant = mats.toList()..sort();
-        if (_matiere != null && !_matieresEnseignant.contains(_matiere))
-          _matiere = null;
-      });
-  }
-
-  Future<void> _chargerEleves(String idClasse) async {
-    final snap = await FirebaseFirestore.instance
-        .collection('utilisateur')
-        .where('role', isEqualTo: 'eleve')
-        .where('idClasse', isEqualTo: idClasse)
-        .get();
-    if (mounted)
-      setState(() {
-        _eleves = snap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
-        _idEtu = null;
-        _nomEtu = null;
-      });
-  }
-
-  Future<void> _pickDate() async {
-    final p = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      locale: const Locale('fr', 'FR'),
-    );
-    if (p != null) setState(() => _date = p);
-  }
-
-  Future<void> _enregistrer() async {
-    if (_idEtu == null) {
-      _snack(context, 'Sélectionnez un élève', Colors.orange);
-      return;
-    }
-    if (_matiere == null) {
-      _snack(context, 'Sélectionnez une matière', Colors.orange);
-      return;
-    }
-    final vm = context.read<AbsenceViewModel>();
-    final absence = AbsenceModel(
-      idEleve: _idEtu!,
-      nomEleve: _nomEtu!,
-      matiere: _matiere!,
-      date: _date,
-      justifiee: _justifiee,
-      idEnseignant: widget.idEnseignant,
-    );
-    final ok = _estModif
-        ? await vm.modifier(widget.absence!.id!, absence)
-        : await vm.ajouter(absence);
-    if (mounted) {
-      _snack(
-        context,
-        ok
-            ? (_estModif ? 'Absence modifiée ✓' : 'Absence enregistrée ✓')
-            : vm.erreur ?? 'Erreur',
-        ok ? Colors.green : Colors.red,
-      );
-      if (ok) Navigator.pop(context);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final vm = context.watch<AbsenceViewModel>();
-
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      appBar: AppBar(
-        title: Text(
-          _estModif ? 'Modifier l\'absence' : 'Enregistrer une absence',
-        ),
-        centerTitle: false,
-        elevation: 0,
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ── Classe ────────────────────────────────────────────────────────
-            if (!_estModif) ...[
-              _SectionTitre('Classe', Icons.class_rounded),
-              const SizedBox(height: 12),
-              _classesEnseignant.isEmpty
-                  ? _InfoBox(
-                      'Aucune classe assignée',
-                      Icons.warning_amber_rounded,
-                      scheme,
-                      color: Colors.orange,
-                    )
-                  : DropdownButtonFormField<String>(
-                      value:
-                          _classesEnseignant.any(
-                            (c) => c['id'] == _idClasseFiltre,
-                          )
-                          ? _idClasseFiltre
-                          : null,
-                      decoration: _deco('Classe', Icons.class_rounded, scheme),
-                      items: _classesEnseignant
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c['id'],
-                              child: Text(c['nom'] ?? ''),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) {
-                        setState(() {
-                          _idClasseFiltre = val;
-                          _eleves = [];
-                          _idEtu = null;
-                        });
-                        if (val != null) {
-                          _chargerEleves(val);
-                          _chargerMatieresParClasse(val);
-                        }
-                      },
-                    ),
-              const SizedBox(height: 16),
-
-              // ── Élève ────────────────────────────────────────────────────
-              _SectionTitre('Élève', Icons.school_rounded),
-              const SizedBox(height: 12),
-              _idClasseFiltre == null
-                  ? _InfoBox(
-                      'Sélectionnez d\'abord une classe',
-                      Icons.info_outline_rounded,
-                      scheme,
-                      muted: true,
-                    )
-                  : _eleves.isEmpty
-                  ? _InfoBox(
-                      'Aucun élève absent dans cette classe',
-                      Icons.warning_amber_rounded,
-                      scheme,
-                      color: Colors.orange,
-                    )
-                  : DropdownButtonFormField<String>(
-                      value: _eleves.any((e) => e['id'] == _idEtu)
-                          ? _idEtu
-                          : null,
-                      decoration: _deco(
-                        'Sélectionner un élève',
-                        Icons.person_rounded,
-                        scheme,
-                      ),
-                      items: _eleves
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e['id'] as String,
-                              child: Text(e['nomComplet'] as String? ?? ''),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) => setState(() {
-                        _idEtu = val;
-                        _nomEtu =
-                            _eleves.firstWhere(
-                                  (e) => e['id'] == val,
-                                )['nomComplet']
-                                as String?;
-                      }),
-                    ),
-              const SizedBox(height: 16),
-
-              // ── Matière ──────────────────────────────────────────────────
-              _SectionTitre('Matière', Icons.book_rounded),
-              const SizedBox(height: 12),
-              _matieresEnseignant.isEmpty
-                  ? _InfoBox(
-                      _idClasseFiltre == null
-                          ? 'Sélectionnez d\'abord une classe'
-                          : 'Aucune matière pour cette classe',
-                      Icons.info_outline_rounded,
-                      scheme,
-                      muted: true,
-                    )
-                  : DropdownButtonFormField<String>(
-                      value: _matieresEnseignant.contains(_matiere)
-                          ? _matiere
-                          : null,
-                      decoration: _deco(
-                        'Sélectionner une matière',
-                        Icons.book_rounded,
-                        scheme,
-                      ),
-                      items: _matieresEnseignant
-                          .map(
-                            (m) => DropdownMenuItem(value: m, child: Text(m)),
-                          )
-                          .toList(),
-                      onChanged: (val) => setState(() => _matiere = val),
-                    ),
-              const SizedBox(height: 16),
-            ] else ...[
-              _InfoBox(_nomEtu ?? '', Icons.person_rounded, scheme),
-              const SizedBox(height: 10),
-              _InfoBox(_matiere ?? '', Icons.book_rounded, scheme),
-              const SizedBox(height: 16),
-            ],
-
-            // ── Date ──────────────────────────────────────────────────────────
-            _SectionTitre('Date', Icons.calendar_today_rounded),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: _pickDate,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: scheme.outlineVariant.withOpacity(0.5),
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_today_rounded,
-                      size: 20,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      '${_date.day.toString().padLeft(2, '0')}/'
-                      '${_date.month.toString().padLeft(2, '0')}/${_date.year}',
-                      style: const TextStyle(fontSize: 15),
-                    ),
-                    const Spacer(),
-                    const Icon(Icons.arrow_drop_down_rounded),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── Justifiée ────────────────────────────────────────────────────
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: (_justifiee ? const Color(0xFF2A8A5C) : Colors.red)
-                    .withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: (_justifiee ? const Color(0xFF2A8A5C) : Colors.red)
-                      .withOpacity(0.25),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _justifiee
-                        ? Icons.check_circle_rounded
-                        : Icons.cancel_rounded,
-                    color: _justifiee ? const Color(0xFF2A8A5C) : Colors.red,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _justifiee
-                          ? 'Absence justifiée'
-                          : 'Absence non justifiée',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _justifiee
-                            ? const Color(0xFF2A8A5C)
-                            : Colors.red,
-                      ),
-                    ),
-                  ),
-                  Switch(
-                    value: _justifiee,
-                    onChanged: (v) => setState(() => _justifiee = v),
-                    activeColor: const Color(0xFF2A8A5C),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            SizedBox(
-              height: 52,
-              child: FilledButton(
-                onPressed: vm.isLoading ? null : _enregistrer,
-                style: FilledButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: vm.isLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        _estModif
-                            ? 'Enregistrer les modifications'
-                            : 'Enregistrer l\'absence',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// DRAWER
-// ════════════════════════════════════════════════════════════════════════════
-class _DrawerRole extends StatelessWidget {
-  final String role;
-  final VoidCallback onDeconnexion;
-  const _DrawerRole({required this.role, required this.onDeconnexion});
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final user = FirebaseAuth.instance.currentUser;
-    IconData icone;
-    String titre;
-    List<Widget> items;
-    switch (role) {
-      case 'admin':
-        icone = Icons.admin_panel_settings_rounded;
-        titre = 'Administrateur';
-        items = [
-          _DItem(
-            Icons.dashboard_rounded,
-            'Tableau de bord',
-            Routeur.routeAccueil,
-            false,
-          ),
-          const _DLabel('GESTION'),
-          _DItem(Icons.school_rounded, 'Élèves', Routeur.routeEleves, false),
-          _DItem(
-            Icons.person_rounded,
-            'Enseignants',
-            Routeur.routeEnseignants,
-            false,
-          ),
-          _DItem(Icons.class_rounded, 'Classes', Routeur.routeClasses, false),
-          _DItem(Icons.book_rounded, 'Matières', Routeur.routeMatieres, false),
-          const _DLabel('ACADÉMIQUE'),
-          _DItem(Icons.star_rounded, 'Notes', Routeur.routeNotes, false),
-          _DItem(
-            Icons.event_busy_rounded,
-            'Absences',
-            Routeur.routeAbsences,
-            true,
-          ),
-          _DItem(
-            Icons.description_rounded,
-            'Bulletins',
-            Routeur.routeBulletin,
-            false,
-          ),
-          Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
-          _DItem(
-            Icons.person_outline_rounded,
-            'Mon Profil',
-            Routeur.routeProfil,
-            false,
-          ),
-        ];
-        break;
-      case 'enseignant':
-        icone = Icons.school_rounded;
-        titre = 'Enseignant';
-        items = [
-          _DItem(
-            Icons.dashboard_rounded,
-            'Tableau de bord',
-            Routeur.routeAccueilEnseignant,
-            false,
-          ),
-          const _DLabel('ACADÉMIQUE'),
-          _DItem(Icons.star_rounded, 'Notes', Routeur.routeNotes, false),
-          _DItem(
-            Icons.event_busy_rounded,
-            'Absences',
-            Routeur.routeAbsences,
-            true,
-          ),
-          _DItem(
-            Icons.description_rounded,
-            'Bulletins',
-            Routeur.routeBulletin,
-            false,
-          ),
-          Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
-          _DItem(
-            Icons.person_outline_rounded,
-            'Mon Profil',
-            Routeur.routeProfil,
-            false,
-          ),
-        ];
-        break;
-      default:
-        icone = Icons.person_rounded;
-        titre = 'Élève';
-        items = [
-          _DItem(
-            Icons.dashboard_rounded,
-            'Tableau de bord',
-            Routeur.routeAccueilEleve,
-            false,
-          ),
-          const _DLabel('MES DONNÉES'),
-          _DItem(Icons.star_rounded, 'Mes Notes', Routeur.routeNotes, false),
-          _DItem(
-            Icons.event_busy_rounded,
-            'Mes Absences',
-            Routeur.routeAbsences,
-            true,
-          ),
-          _DItem(
-            Icons.description_rounded,
-            'Mon Bulletin',
-            Routeur.routeBulletin,
-            false,
-          ),
-          Divider(height: 20, color: scheme.outlineVariant.withOpacity(0.4)),
-          _DItem(
-            Icons.person_outline_rounded,
-            'Mon Profil',
-            Routeur.routeProfil,
-            false,
-          ),
-        ];
-    }
-    return Drawer(
-      backgroundColor: scheme.surface,
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 56, 20, 24),
-            color: scheme.primary,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: scheme.onPrimary.withOpacity(0.2),
-                  child: Icon(icone, color: scheme.onPrimary, size: 28),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  titre,
-                  style: TextStyle(
-                    color: scheme.onPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  user?.email ?? '',
-                  style: TextStyle(
-                    color: scheme.onPrimary.withOpacity(0.8),
-                    fontSize: 12,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              children: items,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            child: Material(
-              color: scheme.error.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  Navigator.pop(context);
-                  onDeconnexion();
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 13,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout_rounded, color: scheme.error, size: 20),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Déconnexion',
-                        style: TextStyle(
-                          color: scheme.error,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DItem extends StatelessWidget {
   final IconData icon;
   final String label, route;
@@ -1556,7 +1682,6 @@ class _DLabel extends StatelessWidget {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 class _Badge extends StatelessWidget {
   final String text;
   final Color color;
